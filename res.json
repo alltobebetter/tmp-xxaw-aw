@@ -1,0 +1,21 @@
+[
+  {
+    "queryString": [],
+    "cookies": [],
+    "headers": [
+      {
+        "name": "Host",
+        "value": "api.openai.com:443"
+      }
+    ],
+    "method": "CONNECT",
+    "postData": {
+      "mimeType": "",
+      "text": "A SSLv3-compatible ClientHello handshake was found. Fiddler extracted the parameters below.\n\nSecure Protocol: TLS 1.2\nCipher Suite: TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384\n\nRecord Layer Version: 3.3 (TLS/1.2)\nRandom: 69 C2 0A 1F EF 5D 98 9E 31 C3 ED 03 86 4D 8F 25 62 C9 66 71 D9 A9 A8 F1 13 77 8C AD 48 2F 5A 86\n\"Time\": 1986/7/4 2:20:25\nSessionID: empty\nExtensions: \n\tserver_name\tapi.openai.com\n\tsupported_groups\tx25519 [0x1d], secp256r1 [0x17], secp384r1 [0x18]\n\tec_point_formats\tuncompressed [0x0]\n\tsignature_algs\trsa_pss_rsae_sha256, rsa_pss_rsae_sha384, rsa_pss_rsae_sha512, rsa_pkcs1_sha256, rsa_pkcs1_sha384, rsa_pkcs1_sha1, ecdsa_secp256r1_sha256, ecdsa_secp384r1_sha384, ecdsa_sha1, dsa_sha1, rsa_pkcs1_sha512, ecdsa_secp521r1_sha512\n\tSessionTicket\tempty\n\textended_master_secret\tempty\n\trenegotiation_info\t00\nCiphers: \n\t[C02C]\tTLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384\r\n\t[C02B]\tTLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256\r\n\t[C030]\tTLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384\r\n\t[C02F]\tTLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256\r\n\t[C024]\tTLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384\r\n\t[C023]\tTLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256\r\n\t[C028]\tTLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384\r\n\t[C027]\tTLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256\r\n\t[C00A]\tTLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA\r\n\t[C009]\tTLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA\r\n\t[C014]\tTLS_ECDHE_RSA_WITH_AES_256_CBC_SHA\r\n\t[C013]\tTLS_ECDHE_RSA_WITH_AES_128_CBC_SHA\r\n\t[009D]\tTLS_RSA_WITH_AES_256_GCM_SHA384\r\n\t[009C]\tTLS_RSA_WITH_AES_128_GCM_SHA256\r\n\t[003D]\tTLS_RSA_WITH_AES_256_CBC_SHA256\r\n\t[003C]\tTLS_RSA_WITH_AES_128_CBC_SHA256\r\n\t[0035]\tTLS_RSA_WITH_AES_256_CBC_SHA\r\n\t[002F]\tTLS_RSA_WITH_AES_128_CBC_SHA\r\n\nCompression: \n\t[00]\tNO_COMPRESSION\r\n\n\n"
+    },
+    "headersSize": 67,
+    "url": "http://api.openai.com:443",
+    "bodySize": 1668,
+    "httpVersion": "HTTP/1.1"
+  }
+]
