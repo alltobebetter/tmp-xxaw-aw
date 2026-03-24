@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Server } from "lucide-react";
+import { Server, Key } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -101,6 +101,16 @@ export default function Navbar() {
           </span>
         )}
       </nav>
+
+      <div className="ml-6 flex items-center">
+        <Link 
+          href="/get-token" 
+          className="flex items-center gap-2 bg-brand-white text-brand-black px-4 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]"
+        >
+          <Key size={16} />
+          获取专属凭证
+        </Link>
+      </div>
     </header>
   );
 }

@@ -43,21 +43,25 @@ export default function GetTokenPage() {
         </Link>
       </div>
 
-      <div className="w-full max-w-lg p-10 bg-brand-dark/80 border border-brand-border rounded-2xl flex flex-col items-center text-center shadow-2xl">
-        <div className="w-16 h-16 rounded-full bg-brand-black border-2 border-brand-border flex items-center justify-center mb-6 shadow-inner">
-          <Key className="text-brand-white" size={24} />
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-bold text-brand-white mb-4 tracking-tight">获取专属鉴权密钥</h1>
-        <p className="text-brand-gray text-sm sm:text-base leading-relaxed mb-10 w-full px-4">
-          此密钥是激活 TraeProxy 桌面端的唯一核验凭证。<br className="hidden sm:block" />请妥善保管，切勿泄露给第三方。
-        </p>
-
+      <div className="w-full max-w-3xl flex flex-col items-center text-center mt-[-8vh]">
         {!token ? (
-          <div className="w-full">
+          <>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand-border bg-brand-dark text-xs text-brand-gray uppercase tracking-wider mb-6">
+              <Key size={14} /> 系统级授权凭证
+            </div>
+            
+            <h1 className="text-4xl sm:text-[3.5rem] font-bold tracking-tight text-brand-white leading-tight mb-6">
+              获取专属鉴权密钥
+            </h1>
+            <p className="text-lg sm:text-xl text-brand-gray max-w-2xl leading-relaxed mb-12">
+              此密钥是激活 TraeProxy 桌面端的唯一核验凭证。<br className="hidden sm:block" />请妥善保管，切勿泄露给第三方。
+            </p>
+
+            <div className="w-full max-w-sm flex flex-col items-center">
             <button
               onClick={handleGenerate}
               disabled={loading}
-              className="w-full bg-brand-white text-brand-black hover:opacity-90 disabled:opacity-50 disabled:cursor-wait font-semibold py-4 rounded-xl transition-all flex items-center justify-center gap-2 text-base"
+              className="w-full bg-brand-white text-brand-black hover:opacity-90 disabled:opacity-50 disabled:cursor-wait font-semibold py-4 rounded-lg transition-opacity flex items-center justify-center gap-2 text-[15px]"
             >
               {loading ? (
                 <span className="animate-pulse">密钥生成中...</span>
@@ -65,20 +69,21 @@ export default function GetTokenPage() {
                 "免费生成我的 Token"
               )}
             </button>
-            {error && <p className="text-red-500 text-sm mt-4 bg-red-500/10 p-3 rounded-lg border border-red-500/20">{error}</p>}
-          </div>
+            {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+            </div>
+          </>
         ) : (
-          <div className="w-full flex flex-col items-center animate-in fade-in zoom-in-95 duration-500">
-            <div className="w-full bg-brand-black border border-brand-border rounded-xl p-8 flex flex-col items-center mb-6 shadow-inner">
-              <div className="text-xs text-brand-gray mb-3 uppercase tracking-widest font-semibold">Your Access Token</div>
-              <div className="text-3xl sm:text-4xl font-mono text-brand-white tracking-wider font-bold break-all selection:bg-brand-gray">
+          <div className="w-full flex flex-col items-center">
+            <div className="w-full py-8 flex flex-col items-center mb-4">
+              <div className="text-sm text-brand-gray mb-4 uppercase tracking-widest font-semibold select-none">Your Access Token</div>
+              <div className="text-4xl sm:text-5xl font-mono text-brand-white tracking-wider font-bold break-all selection:bg-brand-gray">
                 {token}
               </div>
             </div>
             
             <button
               onClick={handleCopy}
-              className="w-full bg-brand-black border border-brand-border text-brand-white hover:bg-brand-white hover:text-brand-black font-semibold py-4 rounded-xl transition-all flex items-center justify-center gap-2 text-base"
+              className="w-full max-w-sm bg-brand-white text-brand-black hover:opacity-90 font-semibold py-4 rounded-lg transition-opacity flex items-center justify-center gap-2 text-[15px]"
             >
               {copied ? (
                 <><CheckCircle2 size={18} className="text-green-500" /> 已安全复制</>
