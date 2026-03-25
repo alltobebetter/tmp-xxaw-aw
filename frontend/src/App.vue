@@ -8,6 +8,8 @@ import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runti
 // @ts-ignore
 import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID } from '../wailsjs/go/main/App'
 
+const CURRENT_APP_VERSION = '1.0.0'
+
 const isRunning = ref(false)
 const certTrusted = ref(false)
 
@@ -15,6 +17,9 @@ const isAuthenticated = ref(false)
 const authLoading = ref(true)
 const authTokenInput = ref('')
 const authError = ref('')
+
+const appStatus = ref<'checking' | 'offline' | 'update_required' | 'ready'>('checking')
+const latestVersionInfo = ref({ version: '', downloadUrl: '' })
 
 const toast = reactive({ show: false, message: '', type: 'error' })
 let toastTimer: number | null = null
@@ -82,6 +87,12 @@ const handleLaunchTrae = async () => {
 
 const minimize = () => WindowMinimise()
 const handleCloseClick = () => {
+  // 如果还没进入主软件层（处于网络检测、更新墙、鉴权墙状态），直接无脑秒退，不弹二次确认！
+  if (appStatus.value !== 'ready' || !isAuthenticated.value) {
+    Quit()
+    return
+  }
+
   if (config.hideCloseWarning) {
     Quit()
   } else {
@@ -175,7 +186,40 @@ const handleOpenHelp = () => {
   BrowserOpenURL('https://trae.agentlab.click/how-to-use')
 }
 
-onMounted(async () => {
+const startupSequence = async () => {
+  appStatus.value = 'checking'
+  // Phase 1: Network & Version Check
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 6000)
+    
+    // In dev mode we use localhost. In production this should point to your live domain.
+    const versionRes = await fetch('http://localhost:3000/api/version', { 
+      signal: controller.signal 
+    })
+    clearTimeout(timeoutId)
+    
+    if (!versionRes.ok) throw new Error('HTTP ' + versionRes.status)
+    
+    const versionData = await versionRes.json()
+    if (versionData.version !== CURRENT_APP_VERSION) {
+      latestVersionInfo.value = {
+        version: versionData.version,
+        downloadUrl: versionData.downloadUrl
+      }
+      appStatus.value = 'update_required'
+      return
+    }
+  } catch (e) {
+    console.error('Update check failed:', e)
+    appStatus.value = 'offline'
+    return
+  }
+
+  // Phase 2: Cert State & Auth check
+  appStatus.value = 'ready'
+  authLoading.value = true
+
   try {
     certTrusted.value = await IsCertInstalled()
   } catch(e) {
@@ -202,6 +246,10 @@ onMounted(async () => {
     }
   }
   authLoading.value = false
+}
+
+onMounted(() => {
+  startupSequence()
 })
 
 const handleVerifyToken = async () => {
@@ -257,9 +305,46 @@ const handleVerifyToken = async () => {
       </div>
     </header>
 
+    <!-- Master App Status Wall (Connectivity & Updates) -->
+    <Transition name="auth-fade">
+      <div v-if="appStatus !== 'ready'" class="auth-overlay" style="z-index: 10000;">
+        
+        <div v-if="appStatus === 'checking'" class="auth-loading">
+          <Server :size="48" class="brand-icon-pulse" />
+          <div class="loading-text-scan">
+            <span>正在连接云端校验网络</span>
+            <span class="dot-1">.</span><span class="dot-2">.</span><span class="dot-3">.</span>
+          </div>
+        </div>
+
+        <div v-else-if="appStatus === 'offline'" class="auth-modal" style="border-color: rgba(220, 38, 38, 0.3);">
+          <div class="auth-header">
+            <ShieldAlert :size="40" style="color: var(--color-danger); margin-bottom: 12px;" />
+            <h2 style="color: var(--color-danger);">网络连接失败</h2>
+            <p>无法连接到云端服务器。请检查您的外网连通性或当前是否存在代理/系统防火墙拦截。</p>
+          </div>
+          <button class="btn-primary block-btn" @click="startupSequence" style="padding: 12px; margin-top: 10px;">
+            重试连接
+          </button>
+        </div>
+
+        <div v-else-if="appStatus === 'update_required'" class="auth-modal" style="border-color: rgba(59, 130, 246, 0.3);">
+          <div class="auth-header">
+            <Download :size="40" style="color: var(--color-primary); margin-bottom: 12px;" />
+            <h2 style="color: var(--text-main);">发现新版本 ({{ latestVersionInfo.version }})</h2>
+            <p>为保障底层拦截引擎的稳定兼容与安全性，此组件要求持续运行最新版本，当前旧版本已停止握手服务。</p>
+          </div>
+          <button class="btn-primary block-btn" @click="BrowserOpenURL(latestVersionInfo.downloadUrl)" style="padding: 12px; margin-top: 10px; background: var(--color-primary);">
+            立刻前往下载更新
+          </button>
+        </div>
+
+      </div>
+    </Transition>
+
     <!-- Auth Wall -->
     <Transition name="auth-fade">
-      <div v-if="!isAuthenticated" class="auth-overlay">
+      <div v-if="appStatus === 'ready' && !isAuthenticated" class="auth-overlay">
         <div v-if="authLoading" class="auth-loading">
           <Server :size="48" class="brand-icon-pulse" />
           <div class="loading-text-scan">

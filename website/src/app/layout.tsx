@@ -16,6 +16,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TraeProxy - 极简本地代理网关",
   description: "专为无缝接管大模型请求而设计，一次配置，全局静默运行。",
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+  }
 };
 
 export default function RootLayout({
