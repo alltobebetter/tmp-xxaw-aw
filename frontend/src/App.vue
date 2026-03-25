@@ -189,6 +189,18 @@ const handleOpenHelp = () => {
   BrowserOpenURL('https://trae.agentlab.click/how-to-use')
 }
 
+const isNewerVersion = (remote: string, local: string) => {
+  const rPts = remote.split('.').map(Number);
+  const lPts = local.split('.').map(Number);
+  for (let i = 0; i < Math.max(rPts.length, lPts.length); i++) {
+    const r = rPts[i] || 0;
+    const l = lPts[i] || 0;
+    if (r > l) return true;
+    if (r < l) return false;
+  }
+  return false;
+}
+
 const startupSequence = async () => {
   appStatus.value = 'checking'
   // Phase 1: Network & Version Check
@@ -205,7 +217,7 @@ const startupSequence = async () => {
     if (!versionRes.ok) throw new Error('HTTP ' + versionRes.status)
     
     const versionData = await versionRes.json()
-    if (versionData.version !== CURRENT_APP_VERSION) {
+    if (isNewerVersion(versionData.version, CURRENT_APP_VERSION)) {
       latestVersionInfo.value = {
         version: versionData.version,
         downloadUrl: versionData.downloadUrl
