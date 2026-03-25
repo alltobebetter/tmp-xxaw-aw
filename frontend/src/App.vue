@@ -6,7 +6,7 @@ import {
 // @ts-ignore
 import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
-import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae } from '../wailsjs/go/main/App'
+import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID } from '../wailsjs/go/main/App'
 
 const isRunning = ref(false)
 const certTrusted = ref(false)
@@ -127,8 +127,12 @@ const toggleProxy = async () => {
         showToast('请先激活 HTTPS 解密系统信任', 'error')
         return
       }
+
+      // 自动清洗输入，兼容带与不带后缀 / 的 URL
+      config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')
+
       if (!config.openaiBase) {
-        showToast('请填写 OpenAI 真实目标源', 'error')
+        showToast('请填写目标源', 'error')
         return
       }
       await StartProxy(Number(config.port), config.openaiBase, "")
@@ -181,10 +185,11 @@ onMounted(async () => {
   const savedToken = localStorage.getItem('traeProxyAuthToken')
   if (savedToken) {
     try {
+      const machineId = await GetMachineID()
       const res = await fetch('http://localhost:3000/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: savedToken })
+        body: JSON.stringify({ token: savedToken, machineId })
       })
       const data = await res.json()
       if (data.valid) {
@@ -207,10 +212,11 @@ const handleVerifyToken = async () => {
   authLoading.value = true
   authError.value = ''
   try {
+    const machineId = await GetMachineID()
     const res = await fetch('http://localhost:3000/api/auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: authTokenInput.value.trim() })
+      body: JSON.stringify({ token: authTokenInput.value.trim(), machineId })
     })
     const data = await res.json()
     if (data.valid) {
@@ -219,8 +225,10 @@ const handleVerifyToken = async () => {
     } else {
       const errorMessageMap: Record<string, string> = {
         'Token missing': '请输入有效的鉴权凭证',
+        'Machine ID missing': '无法读取本地计算机特征码',
         'Token not found': '云端未找到此凭证或输入有误',
         'Token revoked or inactive': '该终端凭证已被云端主动封禁',
+        'Device limit reached': '当前密钥授权绑定的设备数已达上限',
         'Internal Server Error': '云端验证服务异常，请稍后重试'
       }
       authError.value = errorMessageMap[data.error] || data.error || '密钥无效或网络错误'
@@ -270,7 +278,6 @@ const handleVerifyToken = async () => {
               <input 
                 v-model="authTokenInput" 
                 type="text" 
-                placeholder="TP-ABCD-1234" 
                 spellcheck="false"
                 @keyup.enter="handleVerifyToken"
               />
@@ -363,7 +370,13 @@ const handleVerifyToken = async () => {
         <div class="settings-body">
           <div class="input-stack">
             <label>OpenAI 真实目标源</label>
-            <input type="text" v-model="config.openaiBase" placeholder="如 https://api.openai.com" :disabled="isRunning" />
+            <input 
+              type="text" 
+              v-model="config.openaiBase" 
+              placeholder="如 https://api.openai.com" 
+              :disabled="isRunning" 
+              @blur="config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')"
+            />
           </div>
           
           <div class="input-stack">
@@ -770,15 +783,17 @@ const handleVerifyToken = async () => {
   position: relative; display: flex; align-items: center; width: 100%;
 }
 .auth-input-group input {
-  width: 100%; box-sizing: border-box; background: var(--bg-input); border: 1px solid var(--border-subtle); color: var(--text-main);
-  padding: 14px 48px 14px 16px; border-radius: 12px; text-align: left; font-family: inherit; font-size: 1.05rem;
-  letter-spacing: normal; outline: none; transition: all 0.2s;
+  width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border-subtle); color: var(--text-main);
+  padding: 16px 48px 16px 20px; border-radius: 12px; text-align: center;
+  font-family: ui-monospace, SFMono-Regular, "Fira Code", Menlo, monospace; font-size: 1.15rem; font-weight: 500;
+  letter-spacing: 2px; outline: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
 }
-.auth-input-group input::placeholder {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: normal; font-size: 0.95rem; opacity: 0.5;
+.auth-input-group input:focus { 
+  border-color: rgba(255, 255, 255, 0.2); 
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 20px rgba(0,0,0,0.3), inset 0 2px 6px rgba(0,0,0,0.15); 
 }
-.auth-input-group input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
 .auth-submit-icon {
   position: absolute; right: 6px; width: 34px; height: 34px; border-radius: 8px;
   background: var(--color-primary); color: white; border: none; display: flex; align-items: center; justify-content: center;

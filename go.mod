@@ -3,6 +3,7 @@ module TraeProxy
 go 1.23.0
 
 require (
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/elazarl/goproxy v1.8.2
 	github.com/wailsapp/wails/v2 v2.11.0
 )

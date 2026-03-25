@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"TraeProxy/proxy"
+	"github.com/denisbrodbeck/machineid"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -58,6 +59,10 @@ func (a *App) StartProxy(port int, openaiBase string, anthropicBase string) erro
 
 func (a *App) StopProxy() error {
 	return a.srv.Stop()
+}
+
+func (a *App) GetMachineID() (string, error) {
+	return machineid.ProtectedID("TraeProxy")
 }
 
 func (a *App) SelectTraePath() (string, error) {
