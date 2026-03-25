@@ -140,10 +140,13 @@ export default function Navbar() {
       </button>
 
       {/* Mobile Fullscreen Menu */}
-      {isMobileMenuOpen && (
-        <div className="absolute top-16 left-0 right-0 h-[calc(100vh-4rem)] bg-brand-black/95 backdrop-blur-xl border-b border-brand-border md:hidden flex flex-col pt-8 px-6 pb-8 overflow-y-auto">
-          <nav className="flex flex-col gap-6 text-base font-medium w-full mt-4">
-            {isHome ? (
+      <div 
+        className={`absolute top-16 left-0 right-0 h-[calc(100vh-4rem)] bg-brand-black/95 backdrop-blur-xl border-b border-brand-border md:hidden flex flex-col pt-8 px-6 pb-8 overflow-y-auto transition-all duration-300 ease-in-out ${
+          isMobileMenuOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-2 pointer-events-none"
+        }`}
+      >
+        <nav className={`flex flex-col gap-6 text-base font-medium w-full mt-4 transition-all duration-300 delay-75 ${isMobileMenuOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
+          {isHome ? (
               <>
                 <a 
                   href="#hero" 
@@ -181,7 +184,7 @@ export default function Navbar() {
             )}
           </nav>
           
-          <div className="mt-auto pt-8 w-full border-t border-brand-border mt-12">
+          <div className={`mt-auto pt-8 w-full border-t border-brand-border mt-12 transition-all duration-300 delay-150 ${isMobileMenuOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"}`}>
             <Link 
               href="/get-token" 
               onClick={() => setIsMobileMenuOpen(false)}
@@ -191,8 +194,7 @@ export default function Navbar() {
               获取极速专属凭证
             </Link>
           </div>
-        </div>
-      )}
+      </div>
     </header>
   );
 }

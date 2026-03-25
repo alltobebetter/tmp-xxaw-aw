@@ -1,20 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Key, Copy, CheckCircle2, ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import Script from "next/script";
+
+declare global {
+  interface Window {
+    grecaptcha: any;
+    onRecaptchaLoad: () => void;
+  }
+}
 
 export default function GetTokenPage() {
   const [loading, setLoading] = useState(false);
   const [token, setToken] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const recaptchaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const renderRecaptcha = () => {
+      if (window.grecaptcha && window.grecaptcha.render && recaptchaRef.current) {
+        if (!recaptchaRef.current.hasChildNodes()) {
+          try {
+            window.grecaptcha.render(recaptchaRef.current, {
+              sitekey: process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "6Lcz5JYsAAAAAE23XZtkqlJlijfacJmfvIq-DKGt",
+              theme: "dark",
+              callback: (t: string) => setRecaptchaToken(t),
+              "expired-callback": () => setRecaptchaToken(""),
+            });
+          } catch (e) {
+            console.error("Recaptcha render error", e);
+          }
+        }
+      }
+    };
+
+    if (window.grecaptcha) {
+      renderRecaptcha();
+    } else {
+      window.onRecaptchaLoad = renderRecaptcha;
+    }
+  }, []);
 
   const handleGenerate = async () => {
+    if (!recaptchaToken) {
+      setError("请先完成上方的人机验证");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/generate", { method: "POST" });
+      const res = await fetch("/api/auth/generate", { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recaptchaToken })
+      });
       const data = await res.json();
       if (data.success && data.data.token) {
         setToken(data.data.token);
@@ -58,17 +101,27 @@ export default function GetTokenPage() {
             </p>
 
             <div className="w-full max-w-sm flex flex-col items-center">
-            <button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="w-full bg-brand-white text-brand-black hover:opacity-90 disabled:opacity-50 disabled:cursor-wait font-semibold py-4 rounded-lg transition-opacity flex items-center justify-center gap-2 text-[15px]"
-            >
-              {loading ? (
-                <span className="animate-pulse">密钥生成中...</span>
-              ) : (
-                "免费生成我的 Token"
-              )}
-            </button>
+              <div className="mb-6 w-full flex justify-center">
+                <div className="w-[300px] h-[74px] relative overflow-hidden rounded-[4px] border border-brand-border bg-[#222]">
+                  <div className="absolute top-[-2px] left-[-2px]">
+                    <div ref={recaptchaRef}></div>
+                  </div>
+                </div>
+              </div>
+              <div className="relative w-full">
+                <span className="absolute -top-3 -right-3 z-10 bg-red-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg transform rotate-12">限时免费</span>
+                <button
+                  onClick={handleGenerate}
+                  disabled={loading || !recaptchaToken}
+                  className="w-full bg-brand-white text-brand-black hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed font-semibold py-4 rounded-lg transition-opacity flex items-center justify-center gap-2 text-[15px]"
+                >
+                  {loading ? (
+                    <span className="animate-pulse">密钥生成中...</span>
+                  ) : (
+                    "生成我的Token"
+                  )}
+                </button>
+              </div>
             {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
             </div>
           </>
@@ -95,6 +148,10 @@ export default function GetTokenPage() {
           </div>
         )}
       </div>
+      <Script 
+        src="https://www.recaptcha.net/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" 
+        strategy="lazyOnload" 
+      />
     </div>
   );
 }
