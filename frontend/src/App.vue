@@ -194,7 +194,7 @@ const startupSequence = async () => {
     const timeoutId = setTimeout(() => controller.abort(), 6000)
     
     // In dev mode we use localhost. In production this should point to your live domain.
-    const versionRes = await fetch('http://localhost:3000/api/version', { 
+    const versionRes = await fetch('https://trae.agentlab.click/api/version', { 
       signal: controller.signal 
     })
     clearTimeout(timeoutId)
@@ -230,7 +230,7 @@ const startupSequence = async () => {
   if (savedToken) {
     try {
       const machineId = await GetMachineID()
-      const res = await fetch('http://localhost:3000/api/auth/verify', {
+      const res = await fetch('https://trae.agentlab.click/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: savedToken, machineId })
@@ -261,7 +261,7 @@ const handleVerifyToken = async () => {
   authError.value = ''
   try {
     const machineId = await GetMachineID()
-    const res = await fetch('http://localhost:3000/api/auth/verify', {
+    const res = await fetch('https://trae.agentlab.click/api/auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: authTokenInput.value.trim(), machineId })
@@ -378,7 +378,7 @@ const handleVerifyToken = async () => {
             <p v-if="authError" class="auth-error-msg">{{ authError }}</p>
           </div>
           <div class="auth-footer">
-            <a href="javascript:void(0)" @click="BrowserOpenURL('http://localhost:3000/get-token')" class="auth-link">点击申请授权 Token</a>
+            <a href="javascript:void(0)" @click="BrowserOpenURL('https://trae.agentlab.click/get-token')" class="auth-link">点击申请授权 Token</a>
           </div>
         </div>
       </div>

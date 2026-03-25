@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
+  const version = '1.0.0';
   return NextResponse.json({
-    version: '1.0.0',
+    version: version,
     forceUpdate: true,
-    downloadUrl: 'https://trae.agentlab.click'
+    downloadUrl: `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`
   });
 }

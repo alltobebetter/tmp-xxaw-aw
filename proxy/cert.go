@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"strings"
 	"time"
 )
@@ -87,6 +88,7 @@ func InstallCA() error {
 
 	// This triggers UAC on Windows
 	cmd := exec.Command("certutil", "-addstore", "-user", "root", certPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Run()
 }
 
@@ -101,6 +103,7 @@ func IsCAInstalled() bool {
 	}
 	// Check store
 	cmd := exec.Command("certutil", "-user", "-store", "root", "TraeProxy Root CA")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
@@ -111,5 +114,6 @@ func IsCAInstalled() bool {
 func UninstallCA() error {
 	// This triggers UAC on Windows
 	cmd := exec.Command("certutil", "-delstore", "-user", "root", "TraeProxy Root CA")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Run()
 }

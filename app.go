@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"TraeProxy/proxy"
 	"github.com/denisbrodbeck/machineid"
@@ -92,6 +93,8 @@ func (a *App) LaunchTrae(path string, port int) error {
 		"ALL_PROXY="+proxyURL,
 		"all_proxy="+proxyURL,
 	)
+	
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	
 	return cmd.Start()
 }

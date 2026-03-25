@@ -1,6 +1,9 @@
 import { ShieldCheck, Zap, ServerCrash, Network, Cpu, Key, DownloadCloud, Rocket, Download, BookOpen } from "lucide-react";
 
 export default function Home() {
+  const version = '1.0.0';
+  const downloadUrl = `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`;
+
   return (
     <div className="flex-1 flex flex-col items-center px-4 md:px-6 lg:px-12 font-[family-name:var(--font-sans)] w-full">
       
@@ -18,7 +21,7 @@ export default function Home() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full sm:w-auto">
-          <a className="flex items-center justify-center gap-2 bg-brand-white text-brand-black px-10 py-3.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 active:opacity-100" href="#download">
+          <a className="flex items-center justify-center gap-2 bg-brand-white text-brand-black px-10 py-3.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 active:opacity-100" href={downloadUrl}>
             <Download size={18} />下载 Windows 版本
           </a>
           <a className="flex items-center justify-center gap-2 bg-brand-black text-brand-light border border-brand-border px-10 py-3.5 rounded-lg text-sm font-semibold transition-colors hover:bg-brand-dark" href="/how-to-use">
