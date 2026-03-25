@@ -1,7 +1,7 @@
 import { ShieldCheck, Zap, ServerCrash, Network, Cpu, Key, DownloadCloud, Rocket, Download, BookOpen } from "lucide-react";
 
 export default function Home() {
-  const version = '1.0.0';
+  const version = '1.1.0';
   const downloadUrl = `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`;
 
   return (
