@@ -8,7 +8,7 @@ import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runti
 // @ts-ignore
 import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID } from '../wailsjs/go/main/App'
 
-const CURRENT_APP_VERSION = '1.0.0'
+const CURRENT_APP_VERSION = '1.1.0'
 
 const isRunning = ref(false)
 const certTrusted = ref(false)
@@ -49,6 +49,7 @@ const loadConfig = () => {
 const savedConfig = loadConfig()
 const config = reactive({
   openaiBase: savedConfig?.openaiBase || '',
+  anthropicBase: savedConfig?.anthropicBase || '',
   port: savedConfig?.port || 8866,
   traePath: savedConfig?.traePath || '',
   hideCloseWarning: savedConfig?.hideCloseWarning || false
@@ -119,6 +120,7 @@ const confirmClearData = () => {
   localStorage.removeItem('traeProxyAuthToken')
   dontShowCloseWarning.value = false
   config.openaiBase = ''
+  config.anthropicBase = ''
   config.port = 8866
   config.traePath = ''
   config.hideCloseWarning = false
@@ -141,12 +143,13 @@ const toggleProxy = async () => {
 
       // 自动清洗输入，兼容带与不带后缀 / 的 URL
       config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')
+      config.anthropicBase = config.anthropicBase.trim().replace(/\/+$/, '')
 
-      if (!config.openaiBase) {
-        showToast('请填写目标源', 'error')
+      if (!config.openaiBase && !config.anthropicBase) {
+        showToast('请填写至少一个目标源 (OpenAI 或 Claude)', 'error')
         return
       }
-      await StartProxy(Number(config.port), config.openaiBase, "")
+      await StartProxy(Number(config.port), config.openaiBase, config.anthropicBase)
       isRunning.value = true
       showToast('代理网关已成功启动', 'success')
     }
@@ -461,6 +464,17 @@ const handleVerifyToken = async () => {
               placeholder="如 https://api.openai.com" 
               :disabled="isRunning" 
               @blur="config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')"
+            />
+          </div>
+          
+          <div class="input-stack">
+            <label>Claude (Anthropic) 真实目标源</label>
+            <input 
+              type="text" 
+              v-model="config.anthropicBase" 
+              placeholder="如 https://api.anthropic.com" 
+              :disabled="isRunning" 
+              @blur="config.anthropicBase = config.anthropicBase.trim().replace(/\/+$/, '')"
             />
           </div>
           
