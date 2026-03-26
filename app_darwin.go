@@ -13,11 +13,13 @@ import (
 )
 
 func (a *App) SelectTraePath() (string, error) {
-	// On macOS, .app bundles are directories, not files.
-	// We must use OpenDirectoryDialog to allow users to select them.
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "选择 Trae 或 Trae CN 的应用程序",
-		DefaultDirectory: "/Applications",
+	// On macOS, .app bundles are "file packages" (actually directories).
+	// Setting TreatPackagesAsDirectories to false ensures .app bundles
+	// appear as selectable single items instead of browsable folders.
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:                      "选择 Trae 或 Trae CN 的应用程序",
+		DefaultDirectory:           "/Applications",
+		TreatPackagesAsDirectories: false,
 	})
 }
 

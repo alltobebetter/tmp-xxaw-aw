@@ -3,6 +3,8 @@
 
 export function GetMachineID():Promise<string>;
 
+export function GetPlatform():Promise<string>;
+
 export function InstallCert():Promise<void>;
 
 export function IsCertInstalled():Promise<boolean>;

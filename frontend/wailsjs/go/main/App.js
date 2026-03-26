@@ -6,6 +6,10 @@ export function GetMachineID() {
   return window['go']['main']['App']['GetMachineID']();
 }
 
+export function GetPlatform() {
+  return window['go']['main']['App']['GetPlatform']();
+}
+
 export function InstallCert() {
   return window['go']['main']['App']['InstallCert']();
 }

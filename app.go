@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"TraeProxy/proxy"
 	"github.com/denisbrodbeck/machineid"
@@ -60,4 +61,8 @@ func (a *App) StopProxy() error {
 
 func (a *App) GetMachineID() (string, error) {
 	return machineid.ProtectedID("TraeProxy")
+}
+
+func (a *App) GetPlatform() string {
+	return runtime.GOOS
 }

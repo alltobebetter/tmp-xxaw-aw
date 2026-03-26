@@ -6,12 +6,13 @@ import {
 // @ts-ignore
 import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
-import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID } from '../wailsjs/go/main/App'
+import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform } from '../wailsjs/go/main/App'
 
 const CURRENT_APP_VERSION = '1.2.0'
 
 const isRunning = ref(false)
 const certTrusted = ref(false)
+const platform = ref('windows')
 
 const isAuthenticated = ref(false)
 const authLoading = ref(true)
@@ -100,6 +101,10 @@ const handleCloseClick = () => {
     showCloseModal.value = true
   }
 }
+
+// Listen for native window close (macOS red button / Alt+F4 etc.)
+// OnBeforeClose in main.go emits this event instead of closing directly
+EventsOn('close-requested', handleCloseClick)
 const confirmClose = () => {
   if (dontShowCloseWarning.value) {
     config.hideCloseWarning = true
@@ -203,6 +208,8 @@ const isNewerVersion = (remote: string, local: string) => {
 
 const startupSequence = async () => {
   appStatus.value = 'checking'
+  // Detect platform for UI adaptation (titlebar, etc.)
+  try { platform.value = await GetPlatform() } catch {}
   // Phase 1: Network & Version Check
   try {
     const controller = new AbortController()
@@ -312,8 +319,8 @@ const handleVerifyToken = async () => {
 <template>
   <div class="layout widget-layout">
     
-    <!-- Custom Draggable Titlebar -->
-    <header class="titlebar" style="--wails-draggable:drag;">
+    <!-- Custom Draggable Titlebar (Windows only, macOS uses native) -->
+    <header v-if="platform !== 'darwin'" class="titlebar" style="--wails-draggable:drag;">
       <div class="brand">
         <Server :size="16" class="brand-icon"/>
         <span class="brand-title">TraeProxy</span>
