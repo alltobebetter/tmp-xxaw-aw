@@ -1,0 +1,107 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build
+        run: wails build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TraeProxy-windows
+          path: build/bin/TraeProxy.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build (Universal Binary - Intel + Apple Silicon)
+        run: wails build -platform darwin/universal
+
+      - name: Package as zip
+        run: |
+          cd build/bin
+          zip -r TraeProxy_macOS.zip TraeProxy.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TraeProxy-macos
+          path: build/bin/TraeProxy_macOS.zip
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TraeProxy-windows
+          path: dist/windows
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: TraeProxy-macos
+          path: dist/macos
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Rename artifacts with version
+        run: |
+          mv dist/windows/TraeProxy.exe "dist/TraeProxy_Setup_v${{ steps.version.outputs.VERSION }}.exe"
+          mv dist/macos/TraeProxy_macOS.zip "dist/TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TraeProxy v${{ steps.version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/TraeProxy_Setup_v${{ steps.version.outputs.VERSION }}.exe
+            dist/TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip
+          body: |
+            ## TraeProxy v${{ steps.version.outputs.VERSION }}
+
+            ### 下载
+            - **Windows**: `TraeProxy_Setup_v${{ steps.version.outputs.VERSION }}.exe`
+            - **macOS**: `TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip`
+
+            > **macOS 用户注意**: 首次打开可能提示"无法验证开发者"，请右键点击应用 → 选择「打开」即可。

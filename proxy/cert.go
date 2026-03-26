@@ -6,13 +6,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"math/big"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
-	"strings"
 	"time"
 )
 
@@ -24,6 +20,15 @@ func getTraeProxyDir() (string, error) {
 	dir := filepath.Join(appData, "TraeProxy")
 	os.MkdirAll(dir, 0755)
 	return dir, nil
+}
+
+// GetCertPath returns the path to the CA certificate file.
+func GetCertPath() (string, error) {
+	dir, err := getTraeProxyDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "ca.crt"), nil
 }
 
 // EnsureCA ensures the CA exists and returns its bytes.
@@ -73,47 +78,4 @@ func EnsureCA() ([]byte, []byte, error) {
 	}
 
 	return certBytes, keyBytes, nil
-}
-
-func InstallCA() error {
-	dir, err := getTraeProxyDir()
-	if err != nil {
-		return err
-	}
-	certPath := filepath.Join(dir, "ca.crt")
-
-	if _, err := os.Stat(certPath); err != nil {
-		return errors.New("certificate file not generated yet")
-	}
-
-	// This triggers UAC on Windows
-	cmd := exec.Command("certutil", "-addstore", "-user", "root", certPath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Run()
-}
-
-func IsCAInstalled() bool {
-	dir, err := getTraeProxyDir()
-	if err != nil {
-		return false
-	}
-	certPath := filepath.Join(dir, "ca.crt")
-	if _, err := os.Stat(certPath); err != nil {
-		return false
-	}
-	// Check store
-	cmd := exec.Command("certutil", "-user", "-store", "root", "TraeProxy Root CA")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(out), "TraeProxy")
-}
-
-func UninstallCA() error {
-	// This triggers UAC on Windows
-	cmd := exec.Command("certutil", "-delstore", "-user", "root", "TraeProxy Root CA")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Run()
 }

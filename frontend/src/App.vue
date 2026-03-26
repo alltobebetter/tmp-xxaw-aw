@@ -8,7 +8,7 @@ import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runti
 // @ts-ignore
 import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID } from '../wailsjs/go/main/App'
 
-const CURRENT_APP_VERSION = '1.1.0'
+const CURRENT_APP_VERSION = '1.2.0'
 
 const isRunning = ref(false)
 const certTrusted = ref(false)
@@ -218,9 +218,14 @@ const startupSequence = async () => {
     
     const versionData = await versionRes.json()
     if (isNewerVersion(versionData.version, CURRENT_APP_VERSION)) {
+      // Pick platform-specific download URL
+      const isMac = navigator.platform.toUpperCase().includes('MAC')
+      const platformUrl = versionData.downloads
+        ? (isMac ? versionData.downloads.macos : versionData.downloads.windows)
+        : versionData.downloadUrl
       latestVersionInfo.value = {
         version: versionData.version,
-        downloadUrl: versionData.downloadUrl
+        downloadUrl: platformUrl
       }
       appStatus.value = 'update_required'
       return
@@ -500,7 +505,7 @@ const handleVerifyToken = async () => {
             <div class="launcher-group">
               <div class="path-input" @click="handleSelectTrae">
                 <FolderOpen :size="14" class="path-icon" />
-                <span :class="{ 'has-path': config.traePath }">{{ config.traePath || '点击选择 Trae.exe 位置' }}</span>
+                <span :class="{ 'has-path': config.traePath }">{{ config.traePath || '点击选择 Trae 位置' }}</span>
               </div>
               <button class="btn-primary" @click="handleLaunchTrae" :disabled="!config.traePath || !isRunning">
                 <Rocket :size="14" style="margin-right:4px"/> 拉起

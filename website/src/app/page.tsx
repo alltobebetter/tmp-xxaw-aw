@@ -1,8 +1,9 @@
-import { ShieldCheck, Zap, ServerCrash, Network, Cpu, Key, DownloadCloud, Rocket, Download, BookOpen } from "lucide-react";
+import { ShieldCheck, Zap, ServerCrash, Network, Cpu, Key, DownloadCloud, Rocket, Download, BookOpen, Apple, Monitor } from "lucide-react";
 
 export default function Home() {
-  const version = '1.1.0';
-  const downloadUrl = `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`;
+  const version = '1.2.0';
+  const windowsUrl = `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`;
+  const macUrl = `https://public.agentlab.click/TraeProxy_macOS_v${version}.zip`;
 
   return (
     <div className="flex-1 flex flex-col items-center px-4 md:px-6 lg:px-12 font-[family-name:var(--font-sans)] w-full">
@@ -21,13 +22,19 @@ export default function Home() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-4 mt-8 w-full sm:w-auto">
-          <a className="flex items-center justify-center gap-2 bg-brand-white text-brand-black px-10 py-3.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 active:opacity-100" href={downloadUrl}>
-            <Download size={18} />下载 Windows 版本
+          <a className="flex items-center justify-center gap-2 bg-brand-white text-brand-black px-10 py-3.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 active:opacity-100" href={windowsUrl}>
+            <Monitor size={18} />下载 Windows 版本
+          </a>
+          <a className="flex items-center justify-center gap-2 bg-brand-white text-brand-black px-10 py-3.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 active:opacity-100" href={macUrl}>
+            <Apple size={18} />下载 macOS 版本
           </a>
           <a className="flex items-center justify-center gap-2 bg-brand-black text-brand-light border border-brand-border px-10 py-3.5 rounded-lg text-sm font-semibold transition-colors hover:bg-brand-dark" href="/how-to-use">
             <BookOpen size={18} />使用指南
           </a>
         </div>
+        <p className="text-xs text-brand-gray mt-4 max-w-md">
+          macOS 用户首次打开可能提示「无法验证开发者」，请右键点击应用 → 选择「打开」即可正常使用。
+        </p>
       </section>
 
       {/* === OVERVIEW SECTION === */}
