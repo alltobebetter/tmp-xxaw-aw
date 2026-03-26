@@ -25,6 +25,7 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Build
+        shell: bash
         run: wails build -trimpath -ldflags "-s -w"
 
       - name: Upload artifact
