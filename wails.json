@@ -9,5 +9,12 @@
   "author": {
     "name": "alltobebetter",
     "email": "alltobebetter@outlook.com"
+  },
+  "info": {
+    "companyName": "alltobebetter",
+    "productName": "TraeProxy",
+    "productVersion": "1.2.0",
+    "copyright": "Copyright © 2025 alltobebetter",
+    "comments": "本地 HTTPS MITM 代理工具"
   }
 }
