@@ -22,8 +22,8 @@ function MacInstallModal({ open, onClose, downloadUrl }: { open: boolean; onClos
           <div className="flex gap-3 items-start">
             <div className="w-6 h-6 rounded-full bg-brand-border flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-brand-white">1</div>
             <div>
-              <p className="text-brand-white font-medium">下载并解压</p>
-              <p className="text-brand-gray mt-1">下载 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">.zip</code> 文件后，双击解压得到 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">TraeProxy.app</code></p>
+              <p className="text-brand-white font-medium">打开安装镜像</p>
+              <p className="text-brand-gray mt-1">下载 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">.dmg</code> 文件后，双击打开挂载磁盘镜像</p>
             </div>
           </div>
 
@@ -31,7 +31,7 @@ function MacInstallModal({ open, onClose, downloadUrl }: { open: boolean; onClos
             <div className="w-6 h-6 rounded-full bg-brand-border flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold text-brand-white">2</div>
             <div>
               <p className="text-brand-white font-medium">拖入 Applications</p>
-              <p className="text-brand-gray mt-1">将 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">TraeProxy.app</code> 拖入 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">/Applications</code> 文件夹（也可以放在其他位置）</p>
+              <p className="text-brand-gray mt-1">将 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">TraeProxy.app</code> 拖到右侧的 <code className="bg-brand-gray/20 border border-brand-gray/30 px-1.5 py-0.5 rounded font-mono text-brand-white mx-0.5">Applications</code> 快捷方式上即可完成安装</p>
             </div>
           </div>
 
@@ -78,7 +78,7 @@ function MacInstallModal({ open, onClose, downloadUrl }: { open: boolean; onClos
 export default function Home() {
   const version = '1.2.0';
   const windowsUrl = `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`;
-  const macUrl = `https://public.agentlab.click/TraeProxy_macOS_v${version}.zip`;
+  const macUrl = `https://public.agentlab.click/TraeProxy_macOS_v${version}.dmg`;
   const [showMacModal, setShowMacModal] = useState(false);
   const macBtnRef = useRef<HTMLButtonElement>(null);
   const [, forceUpdate] = useState(0);

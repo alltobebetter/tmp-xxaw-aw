@@ -8,7 +8,7 @@ export async function GET() {
     downloadUrl: `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`,
     downloads: {
       windows: `https://public.agentlab.click/TraeProxy_Setup_v${version}.exe`,
-      macos: `https://public.agentlab.click/TraeProxy_macOS_v${version}.zip`
+      macos: `https://public.agentlab.click/TraeProxy_macOS_v${version}.dmg`
     }
   });
 }
