@@ -25,7 +25,7 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Build
-        run: wails build
+        run: wails build -trimpath -ldflags "-s -w"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -50,7 +50,7 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Build (Universal Binary - Intel + Apple Silicon)
-        run: wails build -platform darwin/universal
+        run: wails build -platform darwin/universal -trimpath -ldflags "-s -w"
 
       - name: Package as zip
         run: |
