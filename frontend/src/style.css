@@ -25,6 +25,8 @@
   --log-msg: #3f3f46;
   --log-prefix: #3b82f6;
   --log-success: #059669;
+  --overlay-bg: rgba(244, 244, 245, 0.85);
+  --overlay-shadow: rgba(0, 0, 0, 0.15);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -48,6 +50,8 @@
     --log-msg: #e4e4e7;
     --log-prefix: #60a5fa;
     --log-success: #34d399;
+    --overlay-bg: rgba(10, 10, 10, 0.85);
+    --overlay-shadow: rgba(0, 0, 0, 0.6);
   }
 }
 

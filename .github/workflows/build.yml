@@ -57,11 +57,27 @@ jobs:
           cd build/bin
           zip -r TraeProxy_macOS.zip TraeProxy.app
 
-      - name: Upload artifact
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "TraeProxy" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "TraeProxy.app" 150 185 \
+            --app-drop-link 450 185 \
+            --no-internet-enable \
+            "build/bin/TraeProxy_macOS.dmg" \
+            "build/bin/TraeProxy.app" || true
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: TraeProxy-macos
-          path: build/bin/TraeProxy_macOS.zip
+          path: |
+            build/bin/TraeProxy_macOS.zip
+            build/bin/TraeProxy_macOS.dmg
 
   release:
     needs: [build-windows, build-macos]
@@ -86,6 +102,7 @@ jobs:
       - name: Rename artifacts with version
         run: |
           mv dist/windows/TraeProxy.exe "dist/TraeProxy_Setup_v${{ steps.version.outputs.VERSION }}.exe"
+          mv dist/macos/TraeProxy_macOS.dmg "dist/TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.dmg" || true
           mv dist/macos/TraeProxy_macOS.zip "dist/TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip"
 
       - name: Create GitHub Release
@@ -96,12 +113,14 @@ jobs:
           prerelease: false
           files: |
             dist/TraeProxy_Setup_v${{ steps.version.outputs.VERSION }}.exe
+            dist/TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.dmg
             dist/TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip
           body: |
             ## TraeProxy v${{ steps.version.outputs.VERSION }}
 
             ### 下载
             - **Windows**: `TraeProxy_Setup_v${{ steps.version.outputs.VERSION }}.exe`
-            - **macOS**: `TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip`
+            - **macOS (推荐)**: `TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.dmg` — 双击打开，拖入 Applications 即可
+            - **macOS (备用)**: `TraeProxy_macOS_v${{ steps.version.outputs.VERSION }}.zip` — 解压后手动拖入 Applications
 
             > **macOS 用户注意**: 首次打开可能提示"无法验证开发者"，请右键点击应用 → 选择「打开」即可。

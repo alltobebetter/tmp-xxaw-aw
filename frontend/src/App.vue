@@ -863,7 +863,7 @@ const handleVerifyToken = async () => {
 .auth-fade-enter-from, .auth-fade-leave-to { opacity: 0; backdrop-filter: blur(0px); }
 .auth-overlay {
   position: absolute; top: 42px; left: 0; right: 0; bottom: 0;
-  background: rgba(10, 10, 10, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  background: var(--overlay-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   z-index: 999; display: flex; align-items: center; justify-content: center; padding: 24px;
 }
 .auth-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; }
@@ -886,7 +886,7 @@ const handleVerifyToken = async () => {
 
 .auth-modal {
   background: var(--bg-card); border: 1px solid var(--border-subtle); padding: 32px 24px;
-  border-radius: 16px; width: 340px; max-width: 90%; box-sizing: border-box; box-shadow: 0 20px 40px rgba(0,0,0,0.6); text-align: center;
+  border-radius: 16px; width: 340px; max-width: 90%; box-sizing: border-box; box-shadow: 0 20px 40px var(--overlay-shadow); text-align: center;
   animation: auth-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes auth-slide-up { from { transform: translateY(20px) scale(0.95); opacity: 0;} to { transform: translateY(0) scale(1); opacity: 1;} }
