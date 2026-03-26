@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"runtime"
 
@@ -9,42 +8,37 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
-	// Create an instance of the app structure
 	app := NewApp()
 
-	// macOS uses native titlebar (rounded corners + traffic lights)
-	// Windows uses custom frameless titlebar
-	frameless := runtime.GOOS != "darwin"
+	// macOS frameless windows have square corners by default.
+	// Making the window background transparent lets CSS border-radius work.
+	bgAlpha := uint8(1)
+	if runtime.GOOS == "darwin" {
+		bgAlpha = 0
+	}
 
-	// Create application with options
 	err := wails.Run(&options.App{
 		Title:         "TraeProxy",
 		Width:         440,
 		Height:        640,
 		DisableResize: true,
-		Frameless:     frameless,
+		Frameless:     true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: bgAlpha},
 		OnStartup:        app.startup,
-		OnBeforeClose: func(ctx context.Context) (prevent bool) {
-			// Emit event to frontend so it can show the close confirmation dialog
-			wailsRuntime.EventsEmit(ctx, "close-requested")
-			return true // Prevent default close; frontend will call Quit() after confirmation
-		},
 		Bind: []interface{}{
 			app,
 		},
 		Mac: &mac.Options{
-			TitleBar: mac.TitleBarDefault(),
+			WebviewIsTransparent: true,
 		},
 	})
 
@@ -52,4 +46,3 @@ func main() {
 		println("Error:", err.Error())
 	}
 }
-

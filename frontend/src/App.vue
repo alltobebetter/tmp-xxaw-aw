@@ -101,10 +101,6 @@ const handleCloseClick = () => {
     showCloseModal.value = true
   }
 }
-
-// Listen for native window close (macOS red button / Alt+F4 etc.)
-// OnBeforeClose in main.go emits this event instead of closing directly
-EventsOn('close-requested', handleCloseClick)
 const confirmClose = () => {
   if (dontShowCloseWarning.value) {
     config.hideCloseWarning = true
@@ -319,14 +315,19 @@ const handleVerifyToken = async () => {
 <template>
   <div class="layout widget-layout">
     
-    <!-- Custom Draggable Titlebar (Windows only, macOS uses native) -->
-    <header v-if="platform !== 'darwin'" class="titlebar" style="--wails-draggable:drag;">
+    <!-- Custom Draggable Titlebar (adapts to platform) -->
+    <header class="titlebar" :class="{ 'titlebar-mac': platform === 'darwin' }" style="--wails-draggable:drag;">
+      <!-- macOS: traffic light buttons on LEFT -->
+      <div v-if="platform === 'darwin'" class="mac-controls" style="--wails-draggable:no-drag;">
+        <button class="mac-btn mac-close" @click="handleCloseClick" title="关闭"></button>
+        <button class="mac-btn mac-minimize" @click="minimize" title="最小化"></button>
+      </div>
       <div class="brand">
         <Server :size="16" class="brand-icon"/>
         <span class="brand-title">TraeProxy</span>
       </div>
-      <!-- Native OS simulation window controls -->
-      <div class="system-controls" style="--wails-draggable:no-drag;">
+      <!-- Windows: icon buttons on RIGHT -->
+      <div v-if="platform !== 'darwin'" class="system-controls" style="--wails-draggable:no-drag;">
         <button class="sys-btn" @click="minimize" title="最小化"><Minus :size="14" :stroke-width="2.5"/></button>
         <button class="sys-btn close-btn" @click="handleCloseClick" title="关闭"><X :size="14" :stroke-width="2.5"/></button>
       </div>
@@ -647,6 +648,31 @@ const handleVerifyToken = async () => {
   background-color: #e81123 !important;
   color: white !important;
 }
+
+/* macOS Traffic Light Buttons */
+.titlebar-mac {
+  padding-left: 12px;
+  padding-right: 18px;
+}
+.mac-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+}
+.mac-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, filter 0.15s;
+  opacity: 0.9;
+}
+.mac-btn:hover { opacity: 1; filter: brightness(1.1); }
+.mac-btn:active { filter: brightness(0.85); }
+.mac-close { background-color: #ff5f57; }
+.mac-minimize { background-color: #febc2e; }
 
 /* Content */
 .content-wrapper {
