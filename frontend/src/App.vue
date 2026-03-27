@@ -42,6 +42,7 @@ const showToast = (msg: string, type: 'error' | 'success' = 'error') => {
 
 const showHideModal = ref(false)
 const showClearDataModal = ref(false)
+const showHelpModal = ref(false)
 const dontShowHideWarning = ref(false)
 
 const hotkeyLabel = computed(() => {
@@ -668,7 +669,7 @@ const handleVerifyToken = async () => {
           <ExternalLink :size="13" />
           <span>在 Linux.do 查看本项目讨论</span>
         </a>
-        <a href="javascript:void(0)" @click="handleOpenHelp" class="quick-link-bar help">
+        <a href="javascript:void(0)" @click="showHelpModal = true" class="quick-link-bar help">
           <BookOpen :size="13" />
           <span>遇到问题请点我</span>
         </a>
@@ -1010,6 +1011,76 @@ const handleVerifyToken = async () => {
           <div class="modal-actions" style="margin-top: 10px;">
             <button class="btn-primary outline sm-btn" @click="showClearDataModal = false">取消</button>
             <button class="btn-primary sm-btn danger-btn" @click="confirmClearData">确认擦除</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Help / FAQ Modal -->
+    <Transition name="modal">
+      <div v-if="showHelpModal" class="modal-overlay" @click.self="showHelpModal = false">
+        <div class="modal-content card help-modal">
+          <div class="help-modal-header">
+            <BookOpen :size="20" style="color: var(--color-primary);" />
+            <h3>常见问题排查指南</h3>
+            <button class="help-modal-close" @click="showHelpModal = false">
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="help-modal-body">
+
+            <div class="faq-section">
+              <div class="faq-badge">基本原理</div>
+              <p>TraeProxy 的核心工作方式是作为一个本地 MITM 代理，拦截 Trae 编辑器发往 <code>api.openai.com</code> 和 <code>api.anthropic.com</code> 的 HTTPS 请求，然后将它们转发到你设置的中转站地址。</p>
+              <p>所以本质上，<b>你的中转站必须完全兼容 OpenAI 或 Anthropic 的 API 格式</b>，TraeProxy 不会做任何格式转换。</p>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge warn">拉起后没反应 / 连不上</div>
+              <ul>
+                <li>点击「拉起」后请<b>耐心等待 3~5 秒</b>，Trae 需要时间完成启动初始化</li>
+                <li>确认你已<b>安装并信任了 HTTPS 解密证书</b>（界面上方绿色盾牌状态）</li>
+                <li>确认代理网关已处于<b>「运行中」</b>状态</li>
+                <li>如果之前已经打开了 Trae，需要<b>完全关闭后重新通过 TraeProxy 拉起</b>，否则代理环境变量不会注入</li>
+              </ul>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge warn">添加模型时提示「模型不存在」</div>
+              <ul>
+                <li>请确认已开启「模型名称重写」功能并添加了对应映射</li>
+                <li>代理会在 Trae 查询模型列表时自动注入你配置的自定义模型名</li>
+                <li>如果仍然不行，试试<b>完全关闭 Trae 后重新拉起</b></li>
+              </ul>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge warn">对话报错 / 返回异常</div>
+              <ul>
+                <li>这<b>通常不是 TraeProxy 的问题</b>，而是你的中转站返回了不兼容的格式</li>
+                <li>用 <code>curl</code> 或 Postman 直接测试你的中转站接口，确认它能正常返回</li>
+                <li>常见原因：中转站不支持 SSE 流式、响应格式不标准、模型名拼写错误</li>
+                <li>如果使用 sub2api 等第三方网关，请确认其 OpenAI 兼容模式已正确开启</li>
+              </ul>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge">密钥轮询相关</div>
+              <ul>
+                <li>开启密钥轮询后，Trae 中填写的 Key 会被<b>完全忽略</b></li>
+                <li>如果分组池为空则自动回退到「通用」池，全部为空时保留 Trae 原始 Key</li>
+                <li>密钥仅存储在本地设备，建议定期使用导出功能备份</li>
+              </ul>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge">还是解决不了？</div>
+              <p>请前往 LinuxDo 讨论帖查看其他用户的反馈，或直接留言描述你的问题。</p>
+              <button class="btn-primary sm-btn" style="margin-top: 8px;" @click="externalLinks.discussion ? BrowserOpenURL(externalLinks.discussion) : showToast('暂未获取到讨论链接', 'error')">
+                <ExternalLink :size="13" style="margin-right: 4px" /> 前往 LinuxDo 讨论帖
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
@@ -1688,6 +1759,108 @@ const handleVerifyToken = async () => {
   color: var(--text-muted);
   opacity: 0.4;
   letter-spacing: 0.3px;
+}
+
+/* Help Modal */
+.help-modal {
+  width: 520px;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+}
+.help-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.help-modal-header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 0.95rem;
+}
+.help-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.15s;
+}
+.help-modal-close:hover {
+  background: var(--border-subtle);
+  color: var(--text-main);
+}
+.help-modal-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.help-modal-body::-webkit-scrollbar {
+  width: 5px;
+}
+.help-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.help-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+.help-modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+.faq-section {
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.faq-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.faq-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-primary);
+  margin-bottom: 8px;
+}
+.faq-badge.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+.faq-section p {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 4px 0;
+}
+.faq-section code {
+  font-size: 0.78rem;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--color-primary);
+}
+.faq-section ul {
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+}
+.faq-section li {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 4px;
 }
 
 </style>
