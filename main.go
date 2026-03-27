@@ -83,14 +83,7 @@ func main() {
 
 			// --- Global hotkey registration ---
 			go func() {
-				var mods []hotkey.Modifier
-				if runtime.GOOS == "darwin" {
-					// macOS: ModWin = ⌘ (Command), ModAlt = Option
-					mods = []hotkey.Modifier{hotkey.ModAlt, hotkey.ModWin}
-				} else {
-					// Windows: Ctrl + Alt
-					mods = []hotkey.Modifier{hotkey.ModCtrl, hotkey.ModAlt}
-				}
+				mods := hotkeyModifiers()
 				hk := hotkey.New(mods, hotkey.KeyT)
 				if err := hk.Register(); err != nil {
 					fmt.Println("Hotkey register failed:", err)
