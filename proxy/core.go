@@ -18,6 +18,10 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// ---------------------------------------------------------------------------
+// Thread-safe data structures
+// ---------------------------------------------------------------------------
+
 // KeyPool manages a thread-safe round-robin pool of API keys.
 type KeyPool struct {
 	mu      sync.RWMutex
@@ -26,7 +30,6 @@ type KeyPool struct {
 }
 
 // Next returns the next key in round-robin order.
-// Returns ("", false) if the pool is empty.
 func (p *KeyPool) Next() (string, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -44,7 +47,7 @@ func (p *KeyPool) SetKeys(keys []string) {
 	p.keys = keys
 }
 
-// ModelMap manages thread-safe map of original model to target model.
+// ModelMap manages a thread-safe mapping from original model name to target model name.
 type ModelMap struct {
 	mu   sync.RWMutex
 	data map[string]string
@@ -56,40 +59,69 @@ func (m *ModelMap) SetMap(mappings map[string]string) {
 	m.data = mappings
 }
 
+// Get returns the mapped model name. Supports exact match and wildcard (*) fallback.
 func (m *ModelMap) Get(original string) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.data == nil {
 		return "", false
 	}
-	
-	// Exact match
 	if target, exists := m.data[original]; exists {
 		return target, true
 	}
-	
-	// Wildcard fallback
 	if target, exists := m.data["*"]; exists {
 		return target, true
 	}
-	
 	return "", false
 }
 
-type Server struct {
-	server       *http.Server
-	ctx          context.Context
-	openaiKeys   KeyPool
-	anthropicKeys KeyPool
-	generalKeys  KeyPool
-	openaiModels ModelMap
-	anthropicModels ModelMap
+// InjectableModels returns all non-wildcard model names for injection into /v1/models.
+func (m *ModelMap) InjectableModels() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var result []string
+	for orig := range m.data {
+		if orig != "*" && orig != "" {
+			result = append(result, orig)
+		}
+	}
+	return result
 }
 
-// modelRewriteInfo is stored in goproxy ctx.UserData to pass info from request to response handler.
-type modelRewriteInfo struct {
-	originalModel string
+// ---------------------------------------------------------------------------
+// Provider abstraction
+// ---------------------------------------------------------------------------
+
+// providerConfig holds provider-specific configuration for the proxy intercept logic.
+type providerConfig struct {
+	name      string   // display name for logs, e.g. "OpenAI", "Claude"
+	hosts     []string // e.g. ["api.openai.com", "api.openai.com:443"]
+	base      string   // user-configured base URL
+	keyPool   *KeyPool
+	keyHeader string // "Authorization" or "x-api-key"
+	keyPrefix string // "Bearer " or ""
+	modelMap  *ModelMap
+	modelFmt  string // "openai" or "anthropic" — determines /v1/models response format
+}
+
+// requestInfo is stored in ctx.UserData to pass data from OnRequest to OnResponse.
+type requestInfo struct {
 	provider      string // "openai" or "anthropic"
+	originalModel string // model name before rewriting (empty if no rewrite happened)
+}
+
+// ---------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------
+
+type Server struct {
+	server          *http.Server
+	ctx             context.Context
+	openaiKeys      KeyPool
+	anthropicKeys   KeyPool
+	generalKeys     KeyPool
+	openaiModels    ModelMap
+	anthropicModels ModelMap
 }
 
 func New() *Server {
@@ -100,14 +132,12 @@ func (s *Server) SetContext(ctx context.Context) {
 	s.ctx = ctx
 }
 
-// SetKeyPools updates the key rotation pools. Can be called while proxy is running.
 func (s *Server) SetKeyPools(openai, anthropic, general []string) {
 	s.openaiKeys.SetKeys(openai)
 	s.anthropicKeys.SetKeys(anthropic)
 	s.generalKeys.SetKeys(general)
 }
 
-// SetModelMaps updates the model name mappings. Can be called while proxy is running.
 func (s *Server) SetModelMaps(openai, anthropic map[string]string) {
 	s.openaiModels.SetMap(openai)
 	s.anthropicModels.SetMap(anthropic)
@@ -123,7 +153,6 @@ func (s *Server) emitLog(prefix, msg, msgType string) {
 	}
 }
 
-// maskKey safely returns a masked version of a key for logging.
 func maskKey(key string) string {
 	if len(key) <= 8 {
 		return key + "····"
@@ -131,8 +160,6 @@ func maskKey(key string) string {
 	return key[:8] + "····"
 }
 
-// getKeyForProvider returns the next key for a given provider.
-// Falls back to the general pool if the provider-specific pool is empty.
 func (s *Server) getKeyForProvider(provider string) (string, bool) {
 	switch provider {
 	case "openai":
@@ -144,209 +171,268 @@ func (s *Server) getKeyForProvider(provider string) (string, bool) {
 			return key, true
 		}
 	}
-	// Fallback to general pool
 	return s.generalKeys.Next()
 }
 
+// ---------------------------------------------------------------------------
+// Unified request/response handling
+// ---------------------------------------------------------------------------
+
+// matchProvider checks if the request matches any provider and returns its config.
+func (s *Server) matchProvider(host string, providers []providerConfig) *providerConfig {
+	for i := range providers {
+		for _, h := range providers[i].hosts {
+			if host == h {
+				return &providers[i]
+			}
+		}
+	}
+	return nil
+}
+
+// handleProviderRequest performs URL rewriting, key rotation, and model remapping for a matched provider.
+func (s *Server) handleProviderRequest(prov *providerConfig, req *http.Request, ctx *goproxy.ProxyCtx) {
+	// URL rewriting
+	if prov.base != "" {
+		if parsed, err := url.Parse(prov.base); err == nil {
+			req.URL.Scheme = parsed.Scheme
+			req.URL.Host = parsed.Host
+			req.Host = parsed.Host
+			s.emitLog(prov.name, "成功劫持拦截，已转发至 "+parsed.Host, "success")
+		}
+	}
+
+	// Key rotation
+	if key, ok := s.getKeyForProvider(prov.modelFmt); ok {
+		if prov.keyPrefix != "" {
+			req.Header.Set(prov.keyHeader, prov.keyPrefix+key)
+		} else {
+			req.Header.Set(prov.keyHeader, key)
+		}
+		s.emitLog(prov.name, "已轮询替换密钥: "+maskKey(key), "success")
+	}
+
+	// Model remapping — only parse body for POST-like methods
+	if req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH" {
+		if req.Body != nil {
+			bodyBytes, err := io.ReadAll(req.Body)
+			if err == nil && len(bodyBytes) > 0 {
+				var bodyParsed map[string]interface{}
+				if json.Unmarshal(bodyBytes, &bodyParsed) == nil {
+					if originalModel, ok := bodyParsed["model"].(string); ok {
+						if targetModel, mapped := prov.modelMap.Get(originalModel); mapped {
+							bodyParsed["model"] = targetModel
+							newBodyBytes, err := json.Marshal(bodyParsed)
+							if err == nil {
+								req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
+								req.ContentLength = int64(len(newBodyBytes))
+								// Store rewrite info for response handler
+								ctx.UserData = &requestInfo{
+									provider:      prov.modelFmt,
+									originalModel: originalModel,
+								}
+								s.emitLog("Model", "成功重写 "+prov.name+" 模型: "+originalModel+" -> "+targetModel, "success")
+								return
+							}
+						}
+					}
+				}
+				// No rewrite happened — restore body
+				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			}
+		}
+	}
+
+	// Store provider info even if no model rewrite (for /v1/models injection)
+	if ctx.UserData == nil {
+		ctx.UserData = &requestInfo{provider: prov.modelFmt}
+	}
+}
+
+// rewriteResponseBody rewrites the model field in a non-streaming JSON response back to the original name.
+func rewriteResponseBody(resp *http.Response, originalModel string) {
+	contentType := resp.Header.Get("Content-Type")
+
+	// ── Streaming (SSE) responses ──
+	// Don't buffer; wrap the body in a streaming replacer.
+	if strings.Contains(contentType, "text/event-stream") {
+		// We can't predict the exact target model name in the response,
+		// so for SSE we skip response model rewriting.
+		// The request-side rewrite is sufficient for Trae to work.
+		return
+	}
+
+	// ── Non-streaming JSON responses ──
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	var bodyParsed map[string]interface{}
+	if json.Unmarshal(bodyBytes, &bodyParsed) != nil {
+		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		return
+	}
+
+	bodyParsed["model"] = originalModel
+	newBodyBytes, err := json.Marshal(bodyParsed)
+	if err != nil {
+		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		return
+	}
+
+	resp.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
+	resp.ContentLength = int64(len(newBodyBytes))
+	resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(newBodyBytes)))
+}
+
+// injectModelsIntoList appends custom model entries to a GET /v1/models response.
+func injectModelsIntoList(resp *http.Response, modelMap *ModelMap, format string) {
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return
+	}
+
+	var bodyParsed map[string]interface{}
+	if json.Unmarshal(bodyBytes, &bodyParsed) != nil {
+		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		return
+	}
+
+	dataList, ok := bodyParsed["data"].([]interface{})
+	if !ok {
+		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		return
+	}
+
+	for _, modelName := range modelMap.InjectableModels() {
+		var mockObj map[string]interface{}
+		if format == "anthropic" {
+			mockObj = map[string]interface{}{
+				"id":           modelName,
+				"type":         "model",
+				"display_name": modelName,
+				"created_at":   "2024-01-01T00:00:00Z",
+			}
+		} else {
+			mockObj = map[string]interface{}{
+				"id":       modelName,
+				"object":   "model",
+				"created":  1686935002,
+				"owned_by": "trae-proxy-injected",
+			}
+		}
+		dataList = append(dataList, mockObj)
+	}
+
+	bodyParsed["data"] = dataList
+	newBodyBytes, err := json.Marshal(bodyParsed)
+	if err != nil {
+		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		return
+	}
+
+	resp.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
+	resp.ContentLength = int64(len(newBodyBytes))
+	resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(newBodyBytes)))
+}
+
+// ---------------------------------------------------------------------------
+// Start / Stop
+// ---------------------------------------------------------------------------
+
 func (s *Server) Start(port int, openaiBase string, anthropicBase string, certBytes, keyBytes []byte) error {
 	ca, err := tls.X509KeyPair(certBytes, keyBytes)
-	if err == nil {
-		goproxy.GoproxyCa = ca
-		goproxy.OkConnect = &goproxy.ConnectAction{Action: goproxy.ConnectAccept, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
-		goproxy.MitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectMitm, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
-		goproxy.HTTPMitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectHTTPMitm, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
-		goproxy.RejectConnect = &goproxy.ConnectAction{Action: goproxy.ConnectReject, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
-	} else {
+	if err != nil {
 		return fmt.Errorf("failed to load CA: %v", err)
 	}
+
+	goproxy.GoproxyCa = ca
+	goproxy.OkConnect = &goproxy.ConnectAction{Action: goproxy.ConnectAccept, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
+	goproxy.MitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectMitm, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
+	goproxy.HTTPMitmConnect = &goproxy.ConnectAction{Action: goproxy.ConnectHTTPMitm, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
+	goproxy.RejectConnect = &goproxy.ConnectAction{Action: goproxy.ConnectReject, TLSConfig: goproxy.TLSConfigFromCA(&ca)}
 
 	p := goproxy.NewProxyHttpServer()
 	p.Verbose = false
 
-	// MITM Only
+	// Build provider configs
+	providers := []providerConfig{
+		{
+			name:      "OpenAI",
+			hosts:     []string{"api.openai.com", "api.openai.com:443"},
+			base:      openaiBase,
+			keyPool:   &s.openaiKeys,
+			keyHeader: "Authorization",
+			keyPrefix: "Bearer ",
+			modelMap:  &s.openaiModels,
+			modelFmt:  "openai",
+		},
+		{
+			name:      "Claude",
+			hosts:     []string{"api.anthropic.com", "api.anthropic.com:443"},
+			base:      anthropicBase,
+			keyPool:   &s.anthropicKeys,
+			keyHeader: "x-api-key",
+			keyPrefix: "",
+			modelMap:  &s.anthropicModels,
+			modelFmt:  "anthropic",
+		},
+	}
+
+	// MITM intercept for target domains
 	p.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile(`^api\.openai\.com:443$`))).
 		HandleConnect(goproxy.AlwaysMitm)
 	p.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile(`^api\.anthropic\.com:443$`))).
 		HandleConnect(goproxy.AlwaysMitm)
 
-	// Rewrite URLs, rotate keys, and remap models
+	// ── OnRequest: URL rewrite, key rotation, model remapping ──
 	p.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-		isMethodPost := req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH"
-		
-		var bodyBytes []byte
-		var bodyParsed map[string]interface{}
-		hasBody := false
-
-		// Parse body if there is one, to rewrite the model name
-		if isMethodPost && req.Body != nil {
-			var err error
-			bodyBytes, err = io.ReadAll(req.Body)
-			if err == nil && len(bodyBytes) > 0 {
-				hasBody = true
-				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes)) // restore for later
-				if err := json.Unmarshal(bodyBytes, &bodyParsed); err != nil {
-					hasBody = false // ignore non-JSON body
-				}
-			}
+		prov := s.matchProvider(req.Host, providers)
+		if prov == nil {
+			return req, nil // Not a target host, pass through
 		}
 
-		// Force uncompressed response for easy rewriting
-		req.Header.Del("Accept-Encoding")
-
-		// Save original host before rewriting so response handler can determine provider
-		req.Header.Set("X-TraeProxy-Original-Host", req.Host)
-
-		if req.Host == "api.openai.com" || req.Host == "api.openai.com:443" {
-			if openaiBase != "" {
-				if parsed, err := url.Parse(openaiBase); err == nil {
-					req.URL.Scheme = parsed.Scheme
-					req.URL.Host = parsed.Host
-					req.Host = parsed.Host
-					s.emitLog("OpenAI", "成功劫持拦截，已转发至 "+parsed.Host, "success")
-				}
-			}
-			// Key rotation: replace Authorization header
-			if key, ok := s.getKeyForProvider("openai"); ok {
-				req.Header.Set("Authorization", "Bearer "+key)
-				s.emitLog("OpenAI", "已轮询替换密钥: "+maskKey(key), "success")
-			}
-			// Model remapping
-			if hasBody {
-				if originalModel, ok := bodyParsed["model"].(string); ok {
-					if targetModel, mapped := s.openaiModels.Get(originalModel); mapped {
-						bodyParsed["model"] = targetModel
-						newBodyBytes, err := json.Marshal(bodyParsed)
-						if err == nil {
-							req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
-							req.ContentLength = int64(len(newBodyBytes))
-							// Save original model + provider to context for response rewriting
-							ctx.UserData = &modelRewriteInfo{originalModel: originalModel, provider: "openai"}
-							s.emitLog("Model", "成功重写 OpenAI 模型: "+originalModel+" -> "+targetModel, "success")
-						}
-					}
-				}
-			}
-		} else if req.Host == "api.anthropic.com" || req.Host == "api.anthropic.com:443" {
-			if anthropicBase != "" {
-				if parsed, err := url.Parse(anthropicBase); err == nil {
-					req.URL.Scheme = parsed.Scheme
-					req.URL.Host = parsed.Host
-					req.Host = parsed.Host
-					s.emitLog("Claude", "成功劫持拦截，已转发至 "+parsed.Host, "success")
-				}
-			}
-			// Key rotation: replace x-api-key header
-			if key, ok := s.getKeyForProvider("anthropic"); ok {
-				req.Header.Set("x-api-key", key)
-				s.emitLog("Claude", "已轮询替换密钥: "+maskKey(key), "success")
-			}
-			// Model remapping
-			if hasBody {
-				if originalModel, ok := bodyParsed["model"].(string); ok {
-					if targetModel, mapped := s.anthropicModels.Get(originalModel); mapped {
-						bodyParsed["model"] = targetModel
-						newBodyBytes, err := json.Marshal(bodyParsed)
-						if err == nil {
-							req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
-							req.ContentLength = int64(len(newBodyBytes))
-							// Save original model + provider to context for response rewriting
-							ctx.UserData = &modelRewriteInfo{originalModel: originalModel, provider: "anthropic"}
-							s.emitLog("Model", "成功重写 Claude 模型: "+originalModel+" -> "+targetModel, "success")
-						}
-					}
-				}
-			}
+		// Only strip Accept-Encoding for GET /models so we can parse the model list.
+		// Leave it intact for all other requests to preserve streaming & compression.
+		isModelsRequest := req.Method == "GET" && (strings.HasSuffix(req.URL.Path, "/v1/models") || strings.HasSuffix(req.URL.Path, "/models"))
+		if isModelsRequest {
+			req.Header.Del("Accept-Encoding")
 		}
+
+		s.handleProviderRequest(prov, req, ctx)
 		return req, nil
 	})
 
-	// Inject models into /v1/models response and rewrite response model back
+	// ── OnResponse: model name back-rewrite & model list injection ──
 	p.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		if resp == nil || resp.Request == nil || resp.Body == nil {
 			return resp
 		}
 
-		// Rewrite response model name back so Trae doesn't reject it
-		if info, ok := ctx.UserData.(*modelRewriteInfo); ok && resp.StatusCode == 200 {
-			bodyBytes, err := io.ReadAll(resp.Body)
-			if err == nil {
-				var bodyParsed map[string]interface{}
-				if err := json.Unmarshal(bodyBytes, &bodyParsed); err == nil {
-					// Replace the model field in response
-					bodyParsed["model"] = info.originalModel
-					newBodyBytes, err := json.Marshal(bodyParsed)
-					if err == nil {
-						resp.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
-						resp.ContentLength = int64(len(newBodyBytes))
-						resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(newBodyBytes)))
-					} else {
-						resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-					}
-				} else {
-					resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-				}
-			}
+		info, _ := ctx.UserData.(*requestInfo)
+		if info == nil {
+			return resp
 		}
 
-		// Determine provider from our custom header (set before host rewriting)
-		if resp.Request.Method == "GET" && resp.StatusCode == 200 && (strings.HasSuffix(resp.Request.URL.Path, "/v1/models") || strings.HasSuffix(resp.Request.URL.Path, "/models")) {
-			originalHost := ""
-			if resp.Request != nil {
-				originalHost = resp.Request.Header.Get("X-TraeProxy-Original-Host")
-			}
-			isAnthropic := strings.Contains(originalHost, "anthropic")
-			bodyBytes, err := io.ReadAll(resp.Body)
-			if err == nil {
-				var bodyParsed map[string]interface{}
-				if err := json.Unmarshal(bodyBytes, &bodyParsed); err == nil {
-					if dataList, ok := bodyParsed["data"].([]interface{}); ok {
-						if isAnthropic {
-							// Inject Anthropic format models
-							s.anthropicModels.mu.RLock()
-							for orig := range s.anthropicModels.data {
-								if orig != "*" && orig != "" {
-									mockObj := map[string]interface{}{
-										"id":           orig,
-										"type":         "model",
-										"display_name": orig,
-										"created_at":   "2024-01-01T00:00:00Z",
-									}
-									dataList = append(dataList, mockObj)
-								}
-							}
-							s.anthropicModels.mu.RUnlock()
-						} else {
-							// Inject OpenAI format models
-							s.openaiModels.mu.RLock()
-							for orig := range s.openaiModels.data {
-								if orig != "*" && orig != "" {
-									mockObj := map[string]interface{}{
-										"id":       orig,
-										"object":   "model",
-										"created":  1686935002,
-										"owned_by": "trae-proxy-injected",
-									}
-									dataList = append(dataList, mockObj)
-								}
-							}
-							s.openaiModels.mu.RUnlock()
-						}
+		// Rewrite response model name back to original (for non-streaming responses)
+		if info.originalModel != "" && resp.StatusCode == 200 {
+			rewriteResponseBody(resp, info.originalModel)
+		}
 
-						bodyParsed["data"] = dataList
-						newBodyBytes, err := json.Marshal(bodyParsed)
-						if err == nil {
-							resp.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
-							resp.ContentLength = int64(len(newBodyBytes))
-							resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(newBodyBytes)))
-						} else {
-							resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-						}
-					} else {
-						resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-					}
-				} else {
-					resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-				}
+		// Inject custom models into GET /v1/models response
+		if resp.Request.Method == "GET" && resp.StatusCode == 200 &&
+			(strings.HasSuffix(resp.Request.URL.Path, "/v1/models") || strings.HasSuffix(resp.Request.URL.Path, "/models")) {
+
+			var modelMap *ModelMap
+			switch info.provider {
+			case "openai":
+				modelMap = &s.openaiModels
+			case "anthropic":
+				modelMap = &s.anthropicModels
+			}
+			if modelMap != nil {
+				injectModelsIntoList(resp, modelMap, info.provider)
 			}
 		}
 
