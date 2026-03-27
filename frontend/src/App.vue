@@ -1030,9 +1030,10 @@ const handleVerifyToken = async () => {
           <div class="help-modal-body">
 
             <div class="faq-section">
-              <div class="faq-badge">基本原理</div>
-              <p>TraeProxy 的核心工作方式是作为一个本地 MITM 代理，拦截 Trae 编辑器发往 <code>api.openai.com</code> 和 <code>api.anthropic.com</code> 的 HTTPS 请求，然后将它们转发到你设置的中转站地址。</p>
-              <p>所以本质上，<b>你的中转站必须完全兼容 OpenAI 或 Anthropic 的 API 格式</b>，TraeProxy 不会做任何格式转换。</p>
+              <div class="faq-badge">设计理念</div>
+              <p>TraeProxy 追求<b>极简、优雅、零侵入</b>。我们相信好的工具应该安静地运行在幕后，为用户消除障碍而非制造新的复杂度。</p>
+              <p>我们专注于做好<b>代理转发、密钥轮询和模型映射</b>这几件核心的事，并将它们做到极致。我们不会去修改 Trae 的内部参数、上下文窗口大小、或是注入任何侵入式的 Hack — 那不是我们的设计哲学。</p>
+              <p>我们始终在倾听社区的声音。如果你有功能建议或改进想法，欢迎在 LinuxDo 讨论帖中留下你的意见，每一条反馈都会被认真对待。</p>
             </div>
 
             <div class="faq-section">
@@ -1076,9 +1077,6 @@ const handleVerifyToken = async () => {
             <div class="faq-section">
               <div class="faq-badge">还是解决不了？</div>
               <p>请前往 LinuxDo 讨论帖查看其他用户的反馈，或直接留言描述你的问题。</p>
-              <button class="btn-primary sm-btn" style="margin-top: 8px;" @click="externalLinks.discussion ? BrowserOpenURL(externalLinks.discussion) : showToast('暂未获取到讨论链接', 'error')">
-                <ExternalLink :size="13" style="margin-right: 4px" /> 前往 LinuxDo 讨论帖
-              </button>
             </div>
 
           </div>
@@ -1768,6 +1766,7 @@ const handleVerifyToken = async () => {
   display: flex;
   flex-direction: column;
   padding: 0 !important;
+  overflow: hidden;
 }
 .help-modal-header {
   display: flex;
