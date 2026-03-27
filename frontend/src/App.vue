@@ -2,10 +2,10 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { 
   Power, ShieldCheck, ShieldAlert, Settings, Download, Minus, X, Server, Trash2, FolderOpen, Rocket, BookOpen, BellOff, BellRing, ArrowRight, LogOut,
-  KeyRound, Plus, CircleDot, Hash, Upload, FileDown
+  KeyRound, Plus, CircleDot, Upload, FileDown
 } from 'lucide-vue-next'
 // @ts-ignore
-import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runtime/runtime'
+import { WindowMinimise, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
 import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
 
@@ -225,7 +225,7 @@ const minimize = () => WindowMinimise()
 const handleCloseClick = () => {
   // Before auth / network phases — quit immediately, no confirmation
   if (appStatus.value !== 'ready' || !isAuthenticated.value) {
-    Quit()
+    QuitApp()
     return
   }
 
@@ -1006,7 +1006,6 @@ const handleVerifyToken = async () => {
 .cert-card { display: flex; flex-direction: column; gap: 12px; padding: 1rem 1.25rem; }
 .cert-info { display: flex; align-items: center; gap: 12px; }
 .cert-text-group { flex: 1; }
-.cert-title-row { display: flex; justify-content: space-between; align-items: flex-start; }
 .uninstall-icon-btn {
   background: transparent; border: none; padding: 4px;
   color: var(--text-muted); cursor: pointer; border-radius: 4px;
@@ -1228,19 +1227,6 @@ const handleVerifyToken = async () => {
 .auth-footer { margin-top: 24px; display: flex; flex-direction: column; gap: 16px; }
 .auth-link { color: var(--text-muted); font-size: 0.8rem; text-decoration: none; transition: color 0.2s; }
 .auth-link:hover { color: var(--text-main); }
-
-/* Coming Soon Badge */
-.coming-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--color-primary);
-  background: rgba(59, 130, 246, 0.1);
-  padding: 2px 8px;
-  border-radius: 20px;
-  margin-left: 8px;
-}
 
 /* Mini Toggle Button (in card headers) */
 .toggle-mini-btn {
