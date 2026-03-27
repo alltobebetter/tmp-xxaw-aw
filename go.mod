@@ -6,6 +6,7 @@ require (
 	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/elazarl/goproxy v1.8.2
 	github.com/wailsapp/wails/v2 v2.11.0
+	golang.design/x/hotkey v0.4.1
 )
 
 require (

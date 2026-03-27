@@ -1,12 +1,13 @@
 <script lang="ts" setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { 
-  Power, ShieldCheck, ShieldAlert, Settings, Download, Minus, X, Server, Trash2, FolderOpen, Rocket, BookOpen, BellOff, BellRing, ArrowRight
+  Power, ShieldCheck, ShieldAlert, Settings, Download, Minus, X, Server, Trash2, FolderOpen, Rocket, BookOpen, BellOff, BellRing, ArrowRight, LogOut,
+  KeyRound, Plus, CircleDot, Hash, Upload, FileDown
 } from 'lucide-vue-next'
 // @ts-ignore
 import { WindowMinimise, Quit, EventsOn, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
-import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform } from '../wailsjs/go/main/App'
+import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
 
 const CURRENT_APP_VERSION = '1.2.0'
 
@@ -35,9 +36,112 @@ const showToast = (msg: string, type: 'error' | 'success' = 'error') => {
   }, 3000)
 }
 
-const showCloseModal = ref(false)
+const showHideModal = ref(false)
 const showClearDataModal = ref(false)
-const dontShowCloseWarning = ref(false)
+const dontShowHideWarning = ref(false)
+
+const hotkeyLabel = computed(() => {
+  return platform.value === 'darwin' ? '⌘+Option+T' : 'Ctrl+Alt+T'
+})
+
+// --- Key Rotation ---
+type KeyGroup = 'openai' | 'anthropic' | 'general'
+const keyGroups = reactive<Record<KeyGroup, { id: number; key: string; label: string }[]>>({
+  openai: [],
+  anthropic: [],
+  general: []
+})
+const activeKeyGroup = ref<KeyGroup>('openai')
+let keyIdCounter = 0
+const newKeyInput = ref('')
+const newKeyLabel = ref('')
+const keyRotationEnabled = ref(false)
+
+const keyGroupTabs: { value: KeyGroup; label: string }[] = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'general', label: '通用' }
+]
+
+const currentGroupKeys = computed(() => keyGroups[activeKeyGroup.value])
+
+const handleAddKey = () => {
+  const k = newKeyInput.value.trim()
+  if (!k) {
+    showToast('请输入有效的 API Key', 'error')
+    return
+  }
+  keyGroups[activeKeyGroup.value].push({ id: ++keyIdCounter, key: k, label: newKeyLabel.value.trim() || `Key #${keyIdCounter}` })
+  newKeyInput.value = ''
+  newKeyLabel.value = ''
+  showToast('密钥已添加到轮询池', 'success')
+}
+
+const handleRemoveKey = (id: number) => {
+  const group = keyGroups[activeKeyGroup.value]
+  const idx = group.findIndex(k => k.id === id)
+  if (idx !== -1) group.splice(idx, 1)
+}
+
+// Export all key pools to JSON file via native dialog
+const exportKeys = async () => {
+  const totalKeys = keyGroups.openai.length + keyGroups.anthropic.length + keyGroups.general.length
+  if (totalKeys === 0) {
+    showToast('轮询池为空，没有可导出的密钥', 'error')
+    return
+  }
+  const data = {
+    openai: keyGroups.openai.map(k => ({ key: k.key, label: k.label })),
+    anthropic: keyGroups.anthropic.map(k => ({ key: k.key, label: k.label })),
+    general: keyGroups.general.map(k => ({ key: k.key, label: k.label }))
+  }
+  try {
+    await ExportKeysToFile(JSON.stringify(data, null, 2))
+    showToast(`已导出 ${totalKeys} 个密钥`, 'success')
+  } catch (err: any) {
+    showToast(`导出失败: ${err.message || err}`, 'error')
+  }
+}
+
+// Import key pools from JSON file via native dialog
+const importKeys = async () => {
+  try {
+    const content = await ImportKeysFromFile()
+    if (!content) return // User cancelled
+    const data = JSON.parse(content)
+    let count = 0
+    for (const group of ['openai', 'anthropic', 'general'] as KeyGroup[]) {
+      if (Array.isArray(data[group])) {
+        for (const item of data[group]) {
+          if (item.key && typeof item.key === 'string') {
+            // Skip duplicates
+            if (!keyGroups[group].some(k => k.key === item.key)) {
+              keyGroups[group].push({ id: ++keyIdCounter, key: item.key, label: item.label || `Key #${keyIdCounter}` })
+              count++
+            }
+          }
+        }
+      }
+    }
+    showToast(count > 0 ? `成功导入 ${count} 个密钥` : '没有新密钥需要导入（已跳过重复项）', count > 0 ? 'success' : 'error')
+  } catch (err: any) {
+    showToast('导入失败：JSON 格式无效', 'error')
+  }
+}
+
+// Sync key pools to Go backend whenever they change
+const syncKeyPoolToBackend = () => {
+  if (!keyRotationEnabled.value) {
+    // Toggle is off — clear backend pools so proxy won't touch auth headers
+    UpdateKeyPool([], [], [])
+    return
+  }
+  const openai = keyGroups.openai.map(k => k.key)
+  const anthropic = keyGroups.anthropic.map(k => k.key)
+  const general = keyGroups.general.map(k => k.key)
+  UpdateKeyPool(openai, anthropic, general)
+}
+
 
 const loadConfig = () => {
   const saved = localStorage.getItem('traeProxyConfig')
@@ -56,9 +160,38 @@ const config = reactive({
   hideCloseWarning: savedConfig?.hideCloseWarning || false
 })
 
-watch(config, (newVal) => {
-  localStorage.setItem('traeProxyConfig', JSON.stringify(newVal))
-}, { deep: true })
+// Restore persisted key rotation state
+if (savedConfig?.keyRotationEnabled) keyRotationEnabled.value = true
+if (savedConfig?.keyGroups) {
+  const saved = savedConfig.keyGroups
+  if (saved.openai?.length) { keyGroups.openai.push(...saved.openai); keyIdCounter = Math.max(keyIdCounter, ...saved.openai.map((k: any) => k.id)) }
+  if (saved.anthropic?.length) { keyGroups.anthropic.push(...saved.anthropic); keyIdCounter = Math.max(keyIdCounter, ...saved.anthropic.map((k: any) => k.id)) }
+  if (saved.general?.length) { keyGroups.general.push(...saved.general); keyIdCounter = Math.max(keyIdCounter, ...saved.general.map((k: any) => k.id)) }
+}
+if (savedConfig?.activeKeyGroup) activeKeyGroup.value = savedConfig.activeKeyGroup
+
+// Sync hideCloseWarning to ref on load
+dontShowHideWarning.value = config.hideCloseWarning
+
+// Persist all settings whenever anything changes
+const saveAllConfig = () => {
+  const data = {
+    ...config,
+    keyRotationEnabled: keyRotationEnabled.value,
+    keyGroups: {
+      openai: [...keyGroups.openai],
+      anthropic: [...keyGroups.anthropic],
+      general: [...keyGroups.general]
+    },
+    activeKeyGroup: activeKeyGroup.value
+  }
+  localStorage.setItem('traeProxyConfig', JSON.stringify(data))
+}
+
+watch(config, saveAllConfig, { deep: true })
+watch(keyGroups, () => { saveAllConfig(); syncKeyPoolToBackend() }, { deep: true })
+watch(keyRotationEnabled, () => { saveAllConfig(); syncKeyPoolToBackend() })
+watch(activeKeyGroup, saveAllConfig)
 
 const handleSelectTrae = async () => {
   try {
@@ -88,24 +221,31 @@ const handleLaunchTrae = async () => {
 }
 
 const minimize = () => WindowMinimise()
+
 const handleCloseClick = () => {
-  // 如果还没进入主软件层（处于网络检测、更新墙、鉴权墙状态），直接无脑秒退，不弹二次确认！
+  // Before auth / network phases — quit immediately, no confirmation
   if (appStatus.value !== 'ready' || !isAuthenticated.value) {
     Quit()
     return
   }
 
   if (config.hideCloseWarning) {
-    Quit()
+    HideWindow()
   } else {
-    showCloseModal.value = true
+    showHideModal.value = true
   }
 }
-const confirmClose = () => {
-  if (dontShowCloseWarning.value) {
+
+const confirmHide = () => {
+  if (dontShowHideWarning.value) {
     config.hideCloseWarning = true
   }
-  Quit()
+  showHideModal.value = false
+  HideWindow()
+}
+
+const handleQuitApp = () => {
+  QuitApp()
 }
 
 const handleClearDataClick = () => {
@@ -119,12 +259,19 @@ const handleClearDataClick = () => {
 const confirmClearData = () => {
   localStorage.removeItem('traeProxyConfig')
   localStorage.removeItem('traeProxyAuthToken')
-  dontShowCloseWarning.value = false
+  dontShowHideWarning.value = false
   config.openaiBase = ''
   config.anthropicBase = ''
   config.port = 8866
   config.traePath = ''
   config.hideCloseWarning = false
+  // Reset key rotation
+  keyGroups.openai.splice(0)
+  keyGroups.anthropic.splice(0)
+  keyGroups.general.splice(0)
+  keyRotationEnabled.value = false
+  // Sync cleared keys to backend
+  syncKeyPoolToBackend()
   showClearDataModal.value = false
   isAuthenticated.value = false
   authTokenInput.value = ''
@@ -142,7 +289,6 @@ const toggleProxy = async () => {
         return
       }
 
-      // 自动清洗输入，兼容带与不带后缀 / 的 URL
       config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')
       config.anthropicBase = config.anthropicBase.trim().replace(/\/+$/, '')
 
@@ -204,14 +350,12 @@ const isNewerVersion = (remote: string, local: string) => {
 
 const startupSequence = async () => {
   appStatus.value = 'checking'
-  // Detect platform for UI adaptation (titlebar, etc.)
   try { platform.value = await GetPlatform() } catch {}
   // Phase 1: Network & Version Check
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 6000)
     
-    // In dev mode we use localhost. In production this should point to your live domain.
     const versionRes = await fetch('https://trae.agentlab.click/api/version', { 
       signal: controller.signal 
     })
@@ -221,7 +365,6 @@ const startupSequence = async () => {
     
     const versionData = await versionRes.json()
     if (isNewerVersion(versionData.version, CURRENT_APP_VERSION)) {
-      // Pick platform-specific download URL
       const isMac = navigator.platform.toUpperCase().includes('MAC')
       const platformUrl = versionData.downloads
         ? (isMac ? versionData.downloads.macos : versionData.downloads.windows)
@@ -273,6 +416,8 @@ const startupSequence = async () => {
 
 onMounted(() => {
   startupSequence()
+  // Sync persisted key pools to Go backend
+  syncKeyPoolToBackend()
 })
 
 const handleVerifyToken = async () => {
@@ -424,136 +569,240 @@ const handleVerifyToken = async () => {
     <!-- Main Content -->
     <main class="content-wrapper">
       
-      <!-- Primary Switch Card (Grows vertically) -->
-      <section class="card power-card" :class="{ 'is-running': isRunning }">
-        <div class="status-top">
-          <div class="info-group">
-            <h3>代理服务状态</h3>
-            <p>{{ isRunning ? `运行中 · 本地端口: ${config.port}` : '服务已停止' }}</p>
-          </div>
-          <button class="switch-btn" :class="{ 'active': isRunning }" @click="toggleProxy">
-            <div class="knob">
-              <Power :size="16" class="knob-icon" :class="{ 'icon-active': isRunning, 'icon-inactive': !isRunning }" />
+      <!-- Top Row: Status + Cert (Two Columns) -->
+      <div class="grid-row-2">
+        <!-- Primary Switch Card -->
+        <section class="card power-card" :class="{ 'is-running': isRunning }">
+          <div class="status-top">
+            <div class="info-group">
+              <h3>代理服务状态</h3>
+              <p>{{ isRunning ? `运行中 · 本地端口: ${config.port}` : '服务已停止' }}</p>
             </div>
-          </button>
-        </div>
-      </section>
-
-      <!-- Security Status -->
-      <section class="card cert-card">
-        <div class="cert-info">
-          <div class="icon-wrap" :class="{ 'trusted': certTrusted, 'untrusted': !certTrusted }">
-            <ShieldCheck v-if="certTrusted" :size="20" :stroke-width="2.5" />
-            <ShieldAlert v-else :size="20" :stroke-width="2.5" />
+            <button class="switch-btn" :class="{ 'active': isRunning }" @click="toggleProxy">
+              <div class="knob">
+                <Power :size="16" class="knob-icon" :class="{ 'icon-active': isRunning, 'icon-inactive': !isRunning }" />
+              </div>
+            </button>
           </div>
-          <div class="info-group cert-text-group">
-            <div class="cert-title-row">
-              <h3 class="sm">HTTPS 解密证书</h3>
-              <button v-if="certTrusted" class="uninstall-icon-btn" @click="handleUninstallCert" title="卸载系统证书">
-                <Trash2 :size="14" />
-              </button>
+        </section>
+
+        <!-- Security Status -->
+        <section class="card power-card">
+          <div class="status-top">
+            <div class="cert-status-left">
+              <div class="icon-wrap" :class="{ 'trusted': certTrusted, 'untrusted': !certTrusted }">
+                <ShieldCheck v-if="certTrusted" :size="20" :stroke-width="2.5" />
+                <ShieldAlert v-else :size="20" :stroke-width="2.5" />
+              </div>
+              <div class="info-group">
+                <h3>HTTPS 解密证书</h3>
+                <p>{{ certTrusted ? '已安全信托给系统' : '需安装后方可拦截' }}</p>
+              </div>
             </div>
-            <p class="sm">{{ certTrusted ? '已安全信托给系统' : '需安装证书方可拦截请求' }}</p>
+            <button v-if="!certTrusted" class="btn-primary sm-btn cert-action-btn" @click="handleInstallCert">
+              <Download :size="14" style="margin-right: 4px" /> 激活
+            </button>
+            <button v-else class="uninstall-icon-btn" @click="handleUninstallCert" title="卸载系统证书">
+              <Trash2 :size="14" />
+            </button>
           </div>
-        </div>
-        <button v-if="!certTrusted" class="btn-primary outline sm-btn block-btn" @click="handleInstallCert">
-          <Download :size="14" style="margin-right: 6px"/> 一键激活系统信任
-        </button>
-      </section>
+        </section>
+      </div>
 
-      <!-- Help Documentation -->
-      <section class="card cert-card clickable-card" @click="handleOpenHelp">
-        <div class="cert-info">
-          <div class="icon-wrap help-icon">
-            <BookOpen :size="20" :stroke-width="2.5" />
-          </div>
-          <div class="info-group cert-text-group">
-            <h3 class="sm">使用说明手册</h3>
-            <p class="sm">点击查看配置教程与常见问题</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- Settings Card -->
+      <!-- Settings Card (Full Width) -->
       <section class="card settings-card">
         <div class="card-header">
           <Settings :size="16" class="header-icon" />
           <h2>路由流转规则</h2>
         </div>
         <div class="settings-body">
-          <div class="input-stack">
-            <label>OpenAI 真实目标源</label>
-            <input 
-              type="text" 
-              v-model="config.openaiBase" 
-              placeholder="如 https://api.openai.com" 
-              :disabled="isRunning" 
-              @blur="config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')"
-            />
-          </div>
-          
-          <div class="input-stack">
-            <label>Claude (Anthropic) 真实目标源</label>
-            <input 
-              type="text" 
-              v-model="config.anthropicBase" 
-              placeholder="如 https://api.anthropic.com" 
-              :disabled="isRunning" 
-              @blur="config.anthropicBase = config.anthropicBase.trim().replace(/\/+$/, '')"
-            />
-          </div>
-          
-          <div class="input-stack">
-            <label>本地监听端口</label>
-            <input type="text" v-model.number="config.port" placeholder="如 8866" :disabled="isRunning" />
+          <div class="settings-grid">
+            <div class="input-stack">
+              <label>OpenAI 真实目标源</label>
+              <input 
+                type="text" 
+                v-model="config.openaiBase" 
+                placeholder="如 https://api.openai.com" 
+                :disabled="isRunning" 
+                @blur="config.openaiBase = config.openaiBase.trim().replace(/\/+$/, '')"
+              />
+            </div>
+            
+            <div class="input-stack">
+              <label>Claude (Anthropic) 真实目标源</label>
+              <input 
+                type="text" 
+                v-model="config.anthropicBase" 
+                placeholder="如 https://api.anthropic.com" 
+                :disabled="isRunning" 
+                @blur="config.anthropicBase = config.anthropicBase.trim().replace(/\/+$/, '')"
+              />
+            </div>
           </div>
 
-          <div class="input-stack">
-            <label>软件路径</label>
-            <div class="launcher-group">
-              <div class="path-input" @click="handleSelectTrae">
-                <FolderOpen :size="14" class="path-icon" />
-                <span :class="{ 'has-path': config.traePath }">{{ config.traePath || '点击选择 Trae 位置' }}</span>
+          <div class="settings-grid">
+            <div class="input-stack">
+              <label>本地监听端口</label>
+              <input type="text" v-model.number="config.port" placeholder="如 8866" :disabled="isRunning" />
+            </div>
+
+            <div class="input-stack">
+              <label>软件路径</label>
+              <div class="launcher-group">
+                <div class="path-input" @click="handleSelectTrae">
+                  <FolderOpen :size="14" class="path-icon" />
+                  <span :class="{ 'has-path': config.traePath }">{{ config.traePath || '点击选择 Trae 位置' }}</span>
+                </div>
+                <button class="btn-primary" @click="handleLaunchTrae" :disabled="!config.traePath || !isRunning">
+                  <Rocket :size="14" style="margin-right:4px"/> 拉起
+                </button>
               </div>
-              <button class="btn-primary" @click="handleLaunchTrae" :disabled="!config.traePath || !isRunning">
-                <Rocket :size="14" style="margin-right:4px"/> 拉起
-              </button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Danger Zone -->
-      <section class="card cert-card clickable-card danger-clickable" @click="handleClearDataClick">
-        <div class="cert-info">
-          <div class="icon-wrap danger-icon">
-            <Trash2 :size="20" :stroke-width="2.5" />
+      <!-- Key Rotation Card (Full Width) -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <KeyRound :size="16" class="header-icon" />
+          <h2>密钥轮询池</h2>
+          <div style="flex:1"></div>
+          <button v-if="keyRotationEnabled" class="key-io-btn" @click="importKeys" title="导入密钥">
+            <Upload :size="13" />
+          </button>
+          <button v-if="keyRotationEnabled" class="key-io-btn" @click="exportKeys" title="导出密钥">
+            <FileDown :size="13" />
+          </button>
+          <button class="toggle-mini-btn" :class="{ active: keyRotationEnabled }" @click="keyRotationEnabled = !keyRotationEnabled">
+            <span class="toggle-mini-dot"></span>
+          </button>
+        </div>
+        <div class="settings-body" v-if="keyRotationEnabled">
+          <p class="feature-desc">在多个 API Key 之间自动轮换调用，分散单个密钥的用量压力。代理在拦截到对应请求时，会自动将请求头中的密钥替换为轮询池中的下一个。若对应分组为空则回退至「通用」池。</p>
+          
+          <!-- Group Tabs -->
+          <div class="key-group-tabs">
+            <button 
+              v-for="tab in keyGroupTabs" 
+              :key="tab.value"
+              class="key-group-tab"
+              :class="{ active: activeKeyGroup === tab.value }"
+              @click="activeKeyGroup = tab.value"
+            >
+              {{ tab.label }}
+              <span v-if="keyGroups[tab.value].length" class="key-count">{{ keyGroups[tab.value].length }}</span>
+            </button>
           </div>
-          <div class="info-group cert-text-group">
-            <h3 class="sm" style="color: var(--color-danger);">一键彻底清理数据</h3>
-            <p class="sm">擦除本地保存的目标源、弹窗偏好等所有设置</p>
+
+          <!-- Key Input Row -->
+          <div class="key-add-row">
+            <div class="key-input-wrap">
+              <input 
+                type="text" 
+                v-model="newKeyInput" 
+                placeholder="在这里输入你的 APIKey 或密钥"
+                class="key-input"
+                @keyup.enter="handleAddKey"
+              />
+            </div>
+            <input 
+              type="text" 
+              v-model="newKeyLabel" 
+              placeholder="备注 (可选)"
+              class="key-label-input"
+            />
+            <button class="btn-primary sm-btn" @click="handleAddKey" style="padding: 8px 12px;">
+              <Plus :size="14" style="margin-right: 2px" /> 添加
+            </button>
           </div>
+
+          <!-- Key List -->
+          <div v-if="currentGroupKeys.length" class="key-list">
+            <div v-for="item in currentGroupKeys" :key="item.id" class="key-item">
+              <div class="key-item-info">
+                <CircleDot :size="10" class="key-dot" />
+                <span class="key-item-label">{{ item.label }}</span>
+                <span class="key-item-value">{{ item.key.slice(0, 8) }}····{{ item.key.slice(-4) }}</span>
+              </div>
+              <button class="key-remove-btn" @click="handleRemoveKey(item.id)" title="移除">
+                <Trash2 :size="13" />
+              </button>
+            </div>
+          </div>
+          <div v-else class="key-empty">
+            <KeyRound :size="20" style="opacity: 0.3; margin-bottom: 6px" />
+            <span>当前分组为空，请添加 API Key</span>
+          </div>
+          <p class="key-backup-hint">💡 密钥仅存储在浏览器本地，建议定期导出备份</p>
+        </div>
+        <div v-else class="settings-body" style="padding: 12px 1.25rem;">
+          <p class="feature-desc" style="margin: 0; opacity: 0.5;">点击右上角开关启用密钥轮询功能</p>
         </div>
       </section>
 
+      <!-- Bottom Row: Help + Clear + Quit (Three Columns) -->
+      <div class="grid-row-3">
+        <!-- Help Documentation -->
+        <section class="card cert-card clickable-card" @click="handleOpenHelp">
+          <div class="cert-info">
+            <div class="icon-wrap help-icon">
+              <BookOpen :size="20" :stroke-width="2.5" />
+            </div>
+            <div class="info-group cert-text-group">
+              <h3 class="sm">使用说明手册</h3>
+              <p class="sm">点击查看配置教程</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Clear Data -->
+        <section class="card cert-card clickable-card danger-clickable" @click="handleClearDataClick">
+          <div class="cert-info">
+            <div class="icon-wrap danger-icon">
+              <Trash2 :size="20" :stroke-width="2.5" />
+            </div>
+            <div class="info-group cert-text-group">
+              <h3 class="sm" style="color: var(--color-danger);">清理数据</h3>
+              <p class="sm">擦除所有本地设置</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Quit Application -->
+        <section class="card cert-card clickable-card quit-clickable" @click="handleQuitApp">
+          <div class="cert-info">
+            <div class="icon-wrap quit-icon">
+              <LogOut :size="20" :stroke-width="2.5" />
+            </div>
+            <div class="info-group cert-text-group">
+              <h3 class="sm" style="color: var(--text-muted);">退出程序</h3>
+              <p class="sm">停止代理并关闭</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
     </main>
 
-    <!-- Close Confirmation Modal -->
+    <!-- Hide Confirmation Modal -->
     <Transition name="modal">
-      <div v-if="showCloseModal" class="modal-overlay">
+      <div v-if="showHideModal" class="modal-overlay" @click.self="showHideModal = false">
         <div class="modal-content card">
-          <h3>确认退出应用</h3>
-          <p>此操作将会彻底关闭此应用（不会最小化到系统托盘）。关闭后，所有的代理拦截功能也将终止。</p>
+          <h3>隐藏到后台</h3>
+          <p>关闭主面板后，代理服务将持续在后台运行。</p>
+          <p>按 <strong>{{ hotkeyLabel }}</strong> 或重新打开应用即可随时唤回面板。</p>
+          <p style="font-size: 0.8rem; color: var(--text-muted); opacity: 0.7;">如需彻底退出程序，请在面板底部点击「退出程序」。</p>
           
-          <button class="toggle-alert-btn" :class="{ muted: dontShowCloseWarning }" @click="dontShowCloseWarning = !dontShowCloseWarning">
-            <BellRing v-if="!dontShowCloseWarning" :size="14" />
+          <button class="toggle-alert-btn" :class="{ muted: dontShowHideWarning }" @click="dontShowHideWarning = !dontShowHideWarning">
+            <BellRing v-if="!dontShowHideWarning" :size="14" />
             <BellOff v-else :size="14" />
-            <span>{{ dontShowCloseWarning ? '已静默：下次退出前不再警告' : '防误触保护中：下次仍会警告' }}</span>
+            <span>{{ dontShowHideWarning ? '已静默：下次关闭将直接隐藏' : '防误触保护中：下次仍会提醒' }}</span>
           </button>
           
           <div class="modal-actions">
-            <button class="btn-primary outline sm-btn" @click="showCloseModal = false">取消</button>
-            <button class="btn-primary sm-btn danger-btn" @click="confirmClose">确认关闭</button>
+            <button class="btn-primary outline sm-btn" @click="showHideModal = false">取消</button>
+            <button class="btn-primary sm-btn" @click="confirmHide">隐藏到后台</button>
           </div>
         </div>
       </div>
@@ -561,16 +810,10 @@ const handleVerifyToken = async () => {
 
     <!-- Clear Data Confirmation Modal -->
     <Transition name="modal">
-      <div v-if="showClearDataModal" class="modal-overlay">
-        <div class="modal-content card" style="width: 330px;">
+      <div v-if="showClearDataModal" class="modal-overlay" @click.self="showClearDataModal = false">
+        <div class="modal-content card">
           <h3>确认彻底清理数据？</h3>
-          <p>此操作将永久抹除所有本地偏好设置，包括：</p>
-          <ul style="color: var(--text-muted); margin: 0 0 0 16px; padding: 0; font-size: 0.85rem; line-height: 1.6;">
-            <li>API 真实目标源</li>
-            <li>本地监听服务端口</li>
-            <li>Trae 拉起路径</li>
-            <li>免打扰弹窗选项状态</li>
-          </ul>
+          <p>此操作将永久抹除所有本地偏好设置，包括 API 目标源、监听端口、Trae 路径、弹窗偏好设置，以及密钥轮询池中已保存的所有密钥。</p>
           <p style="margin-top: 2px; color: var(--color-danger); font-size: 0.8rem; background-color: rgba(220, 38, 38, 0.05); padding: 8px; border-radius: 6px; border: 1px dashed rgba(220, 38, 38, 0.2);">
             <b>重点注意：</b>已经安装在操作系统的 HTTPS 解密证书<b>不会</b>被波及。如需卸载系统证书，请点击上方独立的垃圾桶按钮。
           </p>
@@ -593,7 +836,7 @@ const handleVerifyToken = async () => {
   box-sizing: border-box;
   background-color: var(--bg-app);
   overflow: hidden;
-  border-radius: 10px; /* Applies cleanly to frameless desktop borders */
+  border-radius: 10px;
   border: 1px solid var(--border-subtle);
 }
 
@@ -603,8 +846,8 @@ const handleVerifyToken = async () => {
   justify-content: space-between;
   align-items: center;
   height: 42px;
-  background: transparent; /* 完美融入应用底色 */
-  border-bottom: none;     /* 去除任何割裂边框 */
+  background: transparent;
+  border-bottom: none;
   padding-left: 18px;
   user-select: none;
 }
@@ -684,6 +927,18 @@ const handleVerifyToken = async () => {
   overflow-y: auto;
 }
 
+/* Grid Layouts */
+.grid-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.grid-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
 .card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -736,6 +991,17 @@ const handleVerifyToken = async () => {
 .icon-active { color: var(--color-success); }
 .icon-inactive { color: var(--text-muted); }
 
+/* Cert Card Compact Layout */
+.cert-status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cert-action-btn {
+  padding: 6px 12px !important;
+  white-space: nowrap;
+}
+
 /* Cert Card */
 .cert-card { display: flex; flex-direction: column; gap: 12px; padding: 1rem 1.25rem; }
 .cert-info { display: flex; align-items: center; gap: 12px; }
@@ -757,12 +1023,16 @@ const handleVerifyToken = async () => {
 .icon-wrap.untrusted { background-color: var(--danger-bg, #fee2e2); color: var(--color-danger); }
 .icon-wrap.help-icon { background-color: rgba(59, 130, 246, 0.1); color: var(--color-primary); }
 .icon-wrap.danger-icon { background-color: rgba(220, 38, 38, 0.1); color: var(--color-danger); }
+.icon-wrap.quit-icon { background-color: rgba(161, 161, 170, 0.1); color: var(--text-muted); }
 
 .clickable-card { cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
 .clickable-card:hover { border-color: var(--color-primary); background-color: rgba(255, 255, 255, 0.02); }
 
-.danger-clickable { background-color: rgba(220, 38, 38, 0.02); border-color: rgba(220, 38, 38, 0.2); }
+.danger-clickable { border-color: rgba(220, 38, 38, 0.2); }
 .danger-clickable:hover { background-color: rgba(220, 38, 38, 0.05) !important; border-color: rgba(220, 38, 38, 0.4) !important; }
+
+.quit-clickable { border-color: var(--border-subtle); }
+.quit-clickable:hover { background-color: rgba(161, 161, 170, 0.05) !important; border-color: var(--text-muted) !important; }
 
 /* Buttons */
 .block-btn { width: 100%; justify-content: center; padding: 8px 0; margin-top: 4px; }
@@ -781,6 +1051,11 @@ const handleVerifyToken = async () => {
 .header-icon { color: var(--text-muted); }
 
 .settings-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
 .input-stack { display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .input-stack label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
 .input-stack .helper { font-size: 0.75rem; color: var(--text-muted); }
@@ -798,7 +1073,7 @@ const handleVerifyToken = async () => {
 }
 .path-input {
   flex: 1; display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-radius: 8px; border: 1px dashed var(--border-subtle);
+  padding: 10px 12px; border-radius: 8px; border: 1px dashed var(--border-subtle);
   background-color: var(--bg-input); cursor: pointer; transition: all 0.2s;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
@@ -809,7 +1084,7 @@ const handleVerifyToken = async () => {
 
 .btn-primary {
   background-color: var(--color-primary); color: #fff;
-  border: none; padding: 8px 14px; border-radius: 8px;
+  border: none; padding: 10px 14px; border-radius: 8px;
   font-size: 0.85rem; font-weight: 500; cursor: pointer; display: flex;
   align-items: center; justify-content: center; transition: background-color 0.2s, opacity 0.2s;
   flex-shrink: 0;
@@ -835,7 +1110,7 @@ const handleVerifyToken = async () => {
   display: flex; align-items: center; justify-content: center; z-index: 9999;
 }
 .modal-content {
-  width: 300px; background-color: var(--bg-card); padding: 1.25rem;
+  width: 380px; background-color: var(--bg-card); padding: 1.25rem;
   border-radius: 12px; border: 1px solid var(--border-subtle);
   box-shadow: 0 10px 30px rgba(0,0,0,0.6);
   display: flex; flex-direction: column; gap: 14px;
@@ -856,7 +1131,6 @@ const handleVerifyToken = async () => {
   color: var(--text-muted); font-weight: normal;
 }
 .toggle-alert-btn:hover {
-  /* Removed translateY for a static hover effect */
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   background-color: rgba(59, 130, 246, 0.15);
 }
@@ -919,7 +1193,7 @@ const handleVerifyToken = async () => {
 
 .auth-modal {
   background: var(--bg-card); border: 1px solid var(--border-subtle); padding: 32px 24px;
-  border-radius: 16px; width: 340px; max-width: 90%; box-sizing: border-box; box-shadow: 0 20px 40px var(--overlay-shadow); text-align: center;
+  border-radius: 16px; width: 380px; max-width: 90%; box-sizing: border-box; box-shadow: 0 20px 40px var(--overlay-shadow); text-align: center;
   animation: auth-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes auth-slide-up { from { transform: translateY(20px) scale(0.95); opacity: 0;} to { transform: translateY(0) scale(1); opacity: 1;} }
@@ -954,4 +1228,247 @@ const handleVerifyToken = async () => {
 .auth-footer { margin-top: 24px; display: flex; flex-direction: column; gap: 16px; }
 .auth-link { color: var(--text-muted); font-size: 0.8rem; text-decoration: none; transition: color 0.2s; }
 .auth-link:hover { color: var(--text-main); }
+
+/* Coming Soon Badge */
+.coming-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-left: 8px;
+}
+
+/* Mini Toggle Button (in card headers) */
+.toggle-mini-btn {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background-color: var(--border-subtle);
+  border: none;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.25s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+.toggle-mini-btn.active {
+  background-color: var(--color-primary);
+}
+.toggle-mini-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+.toggle-mini-btn.active .toggle-mini-dot {
+  transform: translateX(16px);
+}
+
+/* Feature Description */
+.feature-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 4px 0;
+}
+
+/* Key Rotation */
+.key-group-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--bg-input);
+  border-radius: 8px;
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+}
+.key-group-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.key-group-tab:hover {
+  color: var(--text-main);
+}
+.key-group-tab.active {
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.key-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--color-primary);
+  color: white;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.key-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.key-add-row .btn-primary {
+  border: 1px solid transparent;
+}
+.key-input-wrap {
+  flex: 1;
+}
+.key-input {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-input);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.key-input:focus {
+  border-color: var(--color-primary);
+}
+.key-label-input {
+  width: 120px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-input);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+  flex-shrink: 0;
+}
+.key-label-input:focus {
+  border-color: var(--color-primary);
+}
+
+.key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.key-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.2s;
+}
+.key-item:hover {
+  border-color: var(--text-muted);
+}
+.key-item-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+.key-dot {
+  color: var(--color-success);
+  flex-shrink: 0;
+}
+.key-item-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+.key-item-value {
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.key-remove-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.key-remove-btn:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-danger);
+}
+.key-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.key-io-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  padding: 4px 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-right: 4px;
+}
+.key-io-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.key-backup-hint {
+  margin: 8px 0 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+  text-align: center;
+}
+
 </style>
