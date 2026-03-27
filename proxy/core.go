@@ -69,9 +69,6 @@ func (m *ModelMap) Get(original string) (string, bool) {
 	if target, exists := m.data[original]; exists {
 		return target, true
 	}
-	if target, exists := m.data["*"]; exists {
-		return target, true
-	}
 	return "", false
 }
 
@@ -81,7 +78,7 @@ func (m *ModelMap) InjectableModels() []string {
 	defer m.mu.RUnlock()
 	var result []string
 	for orig := range m.data {
-		if orig != "*" && orig != "" {
+		if orig != "" {
 			result = append(result, orig)
 		}
 	}

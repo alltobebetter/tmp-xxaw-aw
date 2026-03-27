@@ -296,7 +296,7 @@ const handleLaunchTrae = async () => {
   }
   try {
     await LaunchTrae(config.traePath, Number(config.port))
-    showToast('代理环境注入成功，软件已拉起', 'success')
+    showToast('代理环境注入成功，软件已拉起，可能需要等待几秒', 'success')
   } catch(err: any) {
     console.error('拉起失败:', err)
     showToast(`启动宿主失败: ${err.message || err}`, 'error')
@@ -862,7 +862,7 @@ const handleVerifyToken = async () => {
           </button>
         </div>
         <div class="settings-body" v-if="modelMapEnabled">
-          <p class="feature-desc">将 Trae 发出的请求中的模型名称动态替换为你指定的真实模型名，用于突破 Trae 内部的模型列表硬编码限制。填 * 表示拦截所有模型。</p>
+          <p class="feature-desc">将 Trae 发出的请求中的模型名称动态替换为你指定的真实模型名，突破编辑器内部模型列表硬编码限制。</p>
           
           <!-- Group Tabs -->
           <div class="key-group-tabs">
@@ -884,7 +884,7 @@ const handleVerifyToken = async () => {
               <input 
                 type="text" 
                 v-model="newModelOriginal" 
-                placeholder="自定义模型名称，填 * 则全匹配"
+                placeholder="自定义模型名称"
                 class="key-input"
                 @keyup.enter="handleAddModelMap"
               />
