@@ -2,14 +2,14 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { 
   Power, ShieldCheck, ShieldAlert, Settings, Download, Minus, X, Server, Trash2, FolderOpen, Rocket, BookOpen, BellOff, BellRing, ArrowRight, LogOut,
-  KeyRound, Plus, CircleDot, Upload, FileDown
+  KeyRound, Plus, CircleDot, Upload, FileDown, ExternalLink, Coffee
 } from 'lucide-vue-next'
 // @ts-ignore
 import { WindowMinimise, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
 import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
 
-const CURRENT_APP_VERSION = '1.2.0'
+const CURRENT_APP_VERSION = '2.0.0'
 
 const isRunning = ref(false)
 const certTrusted = ref(false)
@@ -22,6 +22,10 @@ const authError = ref('')
 
 const appStatus = ref<'checking' | 'offline' | 'update_required' | 'ready'>('checking')
 const latestVersionInfo = ref({ version: '', downloadUrl: '' })
+const externalLinks = ref({
+  discussion: '',
+  support: ''
+})
 
 const toast = reactive({ show: false, message: '', type: 'error' })
 let toastTimer: number | null = null
@@ -376,6 +380,11 @@ const startupSequence = async () => {
       appStatus.value = 'update_required'
       return
     }
+    // Store dynamic links
+    if (versionData.links) {
+      if (versionData.links.discussion) externalLinks.value.discussion = versionData.links.discussion
+      if (versionData.links.support) externalLinks.value.support = versionData.links.support
+    }
   } catch (e) {
     console.error('Update check failed:', e)
     appStatus.value = 'offline'
@@ -569,6 +578,18 @@ const handleVerifyToken = async () => {
     <!-- Main Content -->
     <main class="content-wrapper">
       
+      <!-- Quick Links -->
+      <div class="quick-links">
+        <a href="javascript:void(0)" @click="externalLinks.discussion ? BrowserOpenURL(externalLinks.discussion) : showToast('暂未获取到讨论链接，请稍后重试', 'error')" class="quick-link-bar">
+          <ExternalLink :size="13" />
+          <span>在 Linux.do 查看本项目讨论</span>
+        </a>
+        <a href="javascript:void(0)" @click="externalLinks.support ? BrowserOpenURL(externalLinks.support) : showToast('暂未获取到赞助链接，请稍后重试', 'error')" class="quick-link-bar coffee">
+          <Coffee :size="13" />
+          <span>请我喝咖啡</span>
+        </a>
+      </div>
+
       <!-- Top Row: Status + Cert (Two Columns) -->
       <div class="grid-row-2">
         <!-- Primary Switch Card -->
@@ -925,6 +946,38 @@ const handleVerifyToken = async () => {
   flex-direction: column;
   gap: 1.25rem;
   overflow-y: auto;
+}
+
+.quick-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: -4px 0 -6px;
+}
+.quick-link-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+.quick-link-bar:hover {
+  background: var(--border-subtle);
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}
+.quick-link-bar.coffee:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
 }
 
 /* Grid Layouts */

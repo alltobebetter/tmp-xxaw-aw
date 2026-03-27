@@ -13,7 +13,7 @@
   "info": {
     "companyName": "alltobebetter",
     "productName": "TraeProxy",
-    "productVersion": "1.2.0",
+    "productVersion": "2.0.0",
     "copyright": "Copyright © 2025 alltobebetter",
     "comments": "本地 HTTPS MITM 代理工具"
   }
