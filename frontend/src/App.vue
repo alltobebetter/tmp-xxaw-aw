@@ -668,6 +668,10 @@ const handleVerifyToken = async () => {
           <ExternalLink :size="13" />
           <span>在 Linux.do 查看本项目讨论</span>
         </a>
+        <a href="javascript:void(0)" @click="handleOpenHelp" class="quick-link-bar help">
+          <BookOpen :size="13" />
+          <span>遇到问题请点我</span>
+        </a>
         <a href="javascript:void(0)" @click="externalLinks.support ? BrowserOpenURL(externalLinks.support) : showToast('暂未获取到赞助链接，请稍后重试', 'error')" class="quick-link-bar coffee">
           <Coffee :size="13" />
           <span>请我喝咖啡</span>
@@ -784,7 +788,7 @@ const handleVerifyToken = async () => {
           </button>
         </div>
         <div class="settings-body" v-if="keyRotationEnabled">
-          <p class="feature-desc">在多个 API Key 之间自动轮换调用，分散单个密钥的用量压力。代理在拦截到对应请求时，会自动将请求头中的密钥替换为轮询池中的下一个。若对应分组为空则回退至「通用」池。</p>
+          <p class="feature-desc">开启后，Trae 中填写的密钥将被忽略，代理会自动使用轮询池中的密钥替换请求。若对应分组为空则回退至「通用」池，全部为空时不替换。</p>
           
           <!-- Group Tabs -->
           <div class="key-group-tabs">
@@ -839,7 +843,7 @@ const handleVerifyToken = async () => {
             <KeyRound :size="20" style="opacity: 0.3; margin-bottom: 6px" />
             <span>当前分组为空，请添加 API Key</span>
           </div>
-          <p class="key-backup-hint">💡 密钥仅存储在浏览器本地，建议定期导出备份</p>
+          <p class="key-backup-hint">💡 密钥仅存储在本地设备，建议定期导出备份</p>
         </div>
         <div v-else class="settings-body" style="padding: 12px 1.25rem;">
           <p class="feature-desc" style="margin: 0; opacity: 0.5;">点击右上角开关启用密钥轮询功能</p>
@@ -857,7 +861,7 @@ const handleVerifyToken = async () => {
           </button>
         </div>
         <div class="settings-body" v-if="modelMapEnabled">
-          <p class="feature-desc">将 Trae 发出的请求中的模型名称动态替换为你指定的真实模型名，用于突破 Trae 内部的模型列表硬编码限制。(原模型填 * 表示全部拦截)。</p>
+          <p class="feature-desc">将 Trae 发出的请求中的模型名称动态替换为你指定的真实模型名，用于突破 Trae 内部的模型列表硬编码限制。填 * 表示拦截所有模型。</p>
           
           <!-- Group Tabs -->
           <div class="key-group-tabs">
@@ -879,7 +883,7 @@ const handleVerifyToken = async () => {
               <input 
                 type="text" 
                 v-model="newModelOriginal" 
-                placeholder="原模型名称 (如 gpt-4o 填 * 则全匹配)"
+                placeholder="自定义模型名称，填 * 则全匹配"
                 class="key-input"
                 @keyup.enter="handleAddModelMap"
               />
@@ -887,7 +891,7 @@ const handleVerifyToken = async () => {
               <input 
                 type="text" 
                 v-model="newModelTarget" 
-                placeholder="实际请求名称 (如 deepseek-chat)"
+                placeholder="实际请求的模型名称"
                 class="key-input"
                 @keyup.enter="handleAddModelMap"
               />
@@ -962,6 +966,11 @@ const handleVerifyToken = async () => {
           </div>
         </section>
       </div>
+
+      <!-- Copyright -->
+      <footer class="app-footer">
+        © Create By SuLin ❤ LinuxDo · v{{ CURRENT_APP_VERSION }}
+      </footer>
 
     </main>
 
@@ -1109,7 +1118,7 @@ const handleVerifyToken = async () => {
 
 .quick-links {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
   margin: -4px 0 -6px;
 }
@@ -1132,6 +1141,11 @@ const handleVerifyToken = async () => {
   background: var(--border-subtle);
   color: var(--text-main);
   border-color: var(--text-muted);
+}
+.quick-link-bar.help:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.06);
 }
 .quick-link-bar.coffee:hover {
   border-color: rgba(245, 158, 11, 0.4);
@@ -1236,13 +1250,11 @@ const handleVerifyToken = async () => {
 .icon-wrap.danger-icon { background-color: rgba(220, 38, 38, 0.1); color: var(--color-danger); }
 .icon-wrap.quit-icon { background-color: rgba(161, 161, 170, 0.1); color: var(--text-muted); }
 
-.clickable-card { cursor: pointer; transition: border-color 0.2s, background-color 0.2s; }
+.clickable-card { cursor: pointer; transition: border-color 0.2s, background-color 0.2s; border-color: transparent; }
 .clickable-card:hover { border-color: var(--color-primary); background-color: rgba(255, 255, 255, 0.02); }
 
-.danger-clickable { border-color: rgba(220, 38, 38, 0.2); }
 .danger-clickable:hover { background-color: rgba(220, 38, 38, 0.05) !important; border-color: rgba(220, 38, 38, 0.4) !important; }
 
-.quit-clickable { border-color: var(--border-subtle); }
 .quit-clickable:hover { background-color: rgba(161, 161, 170, 0.05) !important; border-color: var(--text-muted) !important; }
 
 /* Buttons */
@@ -1667,6 +1679,15 @@ const handleVerifyToken = async () => {
   color: var(--text-muted);
   opacity: 0.6;
   text-align: center;
+}
+
+.app-footer {
+  text-align: center;
+  padding: 12px 0 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  opacity: 0.4;
+  letter-spacing: 0.3px;
 }
 
 </style>
