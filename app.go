@@ -83,6 +83,11 @@ func (a *App) UpdateKeyPool(openaiKeys []string, anthropicKeys []string, general
 	a.srv.SetKeyPools(openaiKeys, anthropicKeys, generalKeys)
 }
 
+// UpdateModelMap updates the model name mapping. Can be called while proxy is running.
+func (a *App) UpdateModelMap(openai map[string]string, anthropic map[string]string) {
+	a.srv.SetModelMaps(openai, anthropic)
+}
+
 // ExportKeysToFile opens a native save dialog and writes JSON content to the chosen file.
 func (a *App) ExportKeysToFile(jsonContent string) error {
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{

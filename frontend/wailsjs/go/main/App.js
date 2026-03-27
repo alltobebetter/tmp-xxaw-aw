@@ -57,3 +57,7 @@ export function UninstallCert() {
 export function UpdateKeyPool(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateKeyPool'](arg1, arg2, arg3);
 }
+
+export function UpdateModelMap(arg1, arg2) {
+  return window['go']['main']['App']['UpdateModelMap'](arg1, arg2);
+}

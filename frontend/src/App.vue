@@ -7,7 +7,7 @@ import {
 // @ts-ignore
 import { WindowMinimise, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
-import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
+import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, UpdateModelMap, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
 
 const CURRENT_APP_VERSION = '2.0.0'
 
@@ -146,6 +146,66 @@ const syncKeyPoolToBackend = () => {
   UpdateKeyPool(openai, anthropic, general)
 }
 
+// --- Model Mapping ---
+type ModelGroup = 'openai' | 'anthropic'
+const modelGroups = reactive<Record<ModelGroup, { id: number; original: string; target: string; label: string }[]>>({
+  openai: [],
+  anthropic: []
+})
+const activeModelGroup = ref<ModelGroup>('openai')
+let modelIdCounter = 0
+const newModelOriginal = ref('')
+const newModelTarget = ref('')
+const newModelLabel = ref('')
+const modelMapEnabled = ref(false)
+
+const modelGroupTabs: { value: ModelGroup; label: string }[] = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' }
+]
+
+const currentGroupModels = computed(() => modelGroups[activeModelGroup.value])
+
+const handleAddModelMap = () => {
+  const orig = newModelOriginal.value.trim()
+  const targ = newModelTarget.value.trim()
+  if (!orig || !targ) {
+    showToast('请填写原模型和目标模型', 'error')
+    return
+  }
+  modelGroups[activeModelGroup.value].push({ 
+    id: ++modelIdCounter, 
+    original: orig, 
+    target: targ, 
+    label: newModelLabel.value.trim() || targ 
+  })
+  newModelOriginal.value = ''
+  newModelTarget.value = ''
+  newModelLabel.value = ''
+  showToast('模型映射已添加', 'success')
+}
+
+const handleRemoveModelMap = (id: number) => {
+  const group = modelGroups[activeModelGroup.value]
+  const idx = group.findIndex(m => m.id === id)
+  if (idx !== -1) group.splice(idx, 1)
+}
+
+const syncModelMapToBackend = () => {
+  if (!modelMapEnabled.value) {
+    UpdateModelMap({}, {})
+    return
+  }
+  const openaiMap: Record<string, string> = {}
+  for (const m of modelGroups.openai) {
+    openaiMap[m.original] = m.target
+  }
+  const anthropicMap: Record<string, string> = {}
+  for (const m of modelGroups.anthropic) {
+    anthropicMap[m.original] = m.target
+  }
+  UpdateModelMap(openaiMap, anthropicMap)
+}
 
 const loadConfig = () => {
   const saved = localStorage.getItem('traeProxyConfig')
@@ -174,6 +234,15 @@ if (savedConfig?.keyGroups) {
 }
 if (savedConfig?.activeKeyGroup) activeKeyGroup.value = savedConfig.activeKeyGroup
 
+// Restore persisted model mapping state
+if (savedConfig?.modelMapEnabled) modelMapEnabled.value = true
+if (savedConfig?.modelGroups) {
+  const saved = savedConfig.modelGroups
+  if (saved.openai?.length) { modelGroups.openai.push(...saved.openai); modelIdCounter = Math.max(modelIdCounter, ...saved.openai.map((m: any) => m.id)) }
+  if (saved.anthropic?.length) { modelGroups.anthropic.push(...saved.anthropic); modelIdCounter = Math.max(modelIdCounter, ...saved.anthropic.map((m: any) => m.id)) }
+}
+if (savedConfig?.activeModelGroup) activeModelGroup.value = savedConfig.activeModelGroup
+
 // Sync hideCloseWarning to ref on load
 dontShowHideWarning.value = config.hideCloseWarning
 
@@ -187,7 +256,13 @@ const saveAllConfig = () => {
       anthropic: [...keyGroups.anthropic],
       general: [...keyGroups.general]
     },
-    activeKeyGroup: activeKeyGroup.value
+    activeKeyGroup: activeKeyGroup.value,
+    modelMapEnabled: modelMapEnabled.value,
+    modelGroups: {
+      openai: [...modelGroups.openai],
+      anthropic: [...modelGroups.anthropic]
+    },
+    activeModelGroup: activeModelGroup.value
   }
   localStorage.setItem('traeProxyConfig', JSON.stringify(data))
 }
@@ -196,6 +271,9 @@ watch(config, saveAllConfig, { deep: true })
 watch(keyGroups, () => { saveAllConfig(); syncKeyPoolToBackend() }, { deep: true })
 watch(keyRotationEnabled, () => { saveAllConfig(); syncKeyPoolToBackend() })
 watch(activeKeyGroup, saveAllConfig)
+watch(modelGroups, () => { saveAllConfig(); syncModelMapToBackend() }, { deep: true })
+watch(modelMapEnabled, () => { saveAllConfig(); syncModelMapToBackend() })
+watch(activeModelGroup, saveAllConfig)
 
 const handleSelectTrae = async () => {
   try {
@@ -274,8 +352,13 @@ const confirmClearData = () => {
   keyGroups.anthropic.splice(0)
   keyGroups.general.splice(0)
   keyRotationEnabled.value = false
-  // Sync cleared keys to backend
+  // Reset model maps
+  modelGroups.openai.splice(0)
+  modelGroups.anthropic.splice(0)
+  modelMapEnabled.value = false
+  // Sync cleared states to backend
   syncKeyPoolToBackend()
+  syncModelMapToBackend()
   showClearDataModal.value = false
   isAuthenticated.value = false
   authTokenInput.value = ''
@@ -425,8 +508,9 @@ const startupSequence = async () => {
 
 onMounted(() => {
   startupSequence()
-  // Sync persisted key pools to Go backend
+  // Sync persisted configs to Go backend
   syncKeyPoolToBackend()
+  syncModelMapToBackend()
 })
 
 const handleVerifyToken = async () => {
@@ -759,6 +843,81 @@ const handleVerifyToken = async () => {
         </div>
         <div v-else class="settings-body" style="padding: 12px 1.25rem;">
           <p class="feature-desc" style="margin: 0; opacity: 0.5;">点击右上角开关启用密钥轮询功能</p>
+        </div>
+      </section>
+
+      <!-- Model Mapping Card (Full Width) -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <BookOpen :size="16" class="header-icon" />
+          <h2>模型名称重写</h2>
+          <div style="flex:1"></div>
+          <button class="toggle-mini-btn" :class="{ active: modelMapEnabled }" @click="modelMapEnabled = !modelMapEnabled">
+            <span class="toggle-mini-dot"></span>
+          </button>
+        </div>
+        <div class="settings-body" v-if="modelMapEnabled">
+          <p class="feature-desc">将 Trae 发出的请求中的模型名称动态替换为你指定的真实模型名，用于突破 Trae 内部的模型列表硬编码限制。(原模型填 * 表示全部拦截)。</p>
+          
+          <!-- Group Tabs -->
+          <div class="key-group-tabs">
+            <button 
+              v-for="tab in modelGroupTabs" 
+              :key="tab.value"
+              class="key-group-tab"
+              :class="{ active: activeModelGroup === tab.value }"
+              @click="activeModelGroup = tab.value"
+            >
+              {{ tab.label }}
+              <span v-if="modelGroups[tab.value].length" class="key-count">{{ modelGroups[tab.value].length }}</span>
+            </button>
+          </div>
+
+          <!-- Model Input Row -->
+          <div class="key-add-row">
+            <div class="key-input-wrap" style="flex: 1; display: flex; gap: 8px;">
+              <input 
+                type="text" 
+                v-model="newModelOriginal" 
+                placeholder="原模型名称 (如 gpt-4o 填 * 则全匹配)"
+                class="key-input"
+                @keyup.enter="handleAddModelMap"
+              />
+              <span style="color: var(--text-muted); display: flex; align-items: center;">→</span>
+              <input 
+                type="text" 
+                v-model="newModelTarget" 
+                placeholder="实际请求名称 (如 deepseek-chat)"
+                class="key-input"
+                @keyup.enter="handleAddModelMap"
+              />
+            </div>
+            <button class="btn-primary sm-btn" @click="handleAddModelMap" style="padding: 8px 12px;">
+              <Plus :size="14" style="margin-right: 2px" /> 添加
+            </button>
+          </div>
+
+          <!-- Model List -->
+          <div v-if="currentGroupModels.length" class="key-list">
+            <div v-for="item in currentGroupModels" :key="item.id" class="key-item">
+              <div class="key-item-info">
+                <CircleDot :size="10" class="key-dot" style="color: var(--color-primary);" />
+                <span class="key-item-label">{{ item.original }}</span>
+                <span class="key-item-value" style="color: var(--text-muted); margin: 0 4px;">=></span>
+                <span class="key-item-label" style="color: var(--color-primary);">{{ item.target }}</span>
+              </div>
+              <button class="key-remove-btn" @click="handleRemoveModelMap(item.id)" title="移除">
+                <Trash2 :size="13" />
+              </button>
+            </div>
+          </div>
+          <div v-else class="key-empty">
+            <BookOpen :size="20" style="opacity: 0.3; margin-bottom: 6px" />
+            <span>当前分组暂无模型映射</span>
+          </div>
+        </div>
+        <div v-else class="settings-body" style="padding: 12px 1.25rem;">
+          <p class="feature-desc" style="margin: 0; opacity: 0.5;">点击右上角开关启用模型名称重写功能</p>
         </div>
       </section>
 
