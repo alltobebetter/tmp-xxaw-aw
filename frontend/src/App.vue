@@ -513,6 +513,10 @@ onMounted(() => {
   // Sync persisted configs to Go backend
   syncKeyPoolToBackend()
   syncModelMapToBackend()
+
+  // Prevent WebView from opening dragged-in files (PDF, TXT, etc.) as new pages
+  document.addEventListener('dragover', (e) => e.preventDefault())
+  document.addEventListener('drop', (e) => e.preventDefault())
 })
 
 const handleVerifyToken = async () => {
@@ -1103,27 +1107,31 @@ const handleVerifyToken = async () => {
           <div class="help-modal-body">
 
             <div class="faq-section">
-              <div class="faq-badge">v2.1.0 现行版本</div>
+              <div class="faq-badge">v2.1.0 当前版本</div>
               <ul>
-                <li>优化跨平台构建系统，完善 Windows 和 macOS 端版本同步更新机制</li>
-                <li>增加一键本地 Git 提交隔离逻辑，解耦 Website 与底层 Proxy 的推送</li>
-                <li>新增顶部栏更新日志快捷入口，方便随时查阅改动情况与新功能</li>
+                <li>新增<b>模型名称重写</b>功能，支持自定义模型别名映射与自动注入模型列表</li>
+                <li>提升整体运行<b>稳定性</b>，优化代理引擎的请求处理与异常恢复</li>
+                <li>修复拖拽文件到窗口导致页面跳转的问题</li>
               </ul>
             </div>
 
             <div class="faq-section">
               <div class="faq-badge">v2.0.0</div>
               <ul>
-                <li><b>双平台支持</b>：完美兼容 Windows 和 macOS 平台原生 API。</li>
-                <li><b>Anthropic 支持</b>：全量支持代理并劫持发送给 Claude 系列的请求。</li>
-                <li><b>密钥轮询重构</b>：可配置多 API Key 自动轮换防限速，支持分组导出导入。</li>
-                <li><b>L站/GitHub 登录</b>：鉴权系统接入 LinuxDo、Github，一键领取防刷凭证。</li>
+                <li>新增 <b>macOS</b> 平台支持，Windows 与 macOS 双端可用</li>
+                <li>新增 <b>Anthropic (Claude)</b> 请求代理支持</li>
+                <li>新增<b>密钥轮询池</b>，多 Key 自动轮换防限速，支持分组导入导出</li>
+                <li>鉴权系统接入 <b>LinuxDo / GitHub</b> 登录</li>
               </ul>
             </div>
 
             <div class="faq-section">
-              <div class="faq-badge">v1.x 早期版本</div>
-              <p>实现了针对 Trae 的本地代理重定向拦截引擎核心，支持动态修改 BaseUrl（包含 OpenAI 等大模型请求的底层劫持） 并以无侵入方式动态注入系统的 Chromium / Node 环境变量。</p>
+              <div class="faq-badge">v1.0.0</div>
+              <ul>
+                <li>实现本地 HTTPS MITM 代理核心，劫持 OpenAI 请求并转发至自定义目标源</li>
+                <li>支持通过 TraeProxy 一键拉起 Trae 并自动注入代理环境变量</li>
+                <li>内置自签名 CA 证书的生成、安装与卸载管理</li>
+              </ul>
             </div>
 
           </div>
