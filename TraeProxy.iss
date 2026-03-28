@@ -1,7 +1,7 @@
 [Setup]
 ; 应用基础信息
 AppName=TraeProxy
-AppVersion=2.0.0
+AppVersion=2.1.0
 AppPublisher=TraeProxy Team
 AppPublisherURL=https://trae.agentlab.click/
 AppSupportURL=https://trae.agentlab.click/
@@ -12,7 +12,7 @@ DefaultGroupName=TraeProxy
 
 ; 输出设置
 OutputDir=release
-OutputBaseFilename=TraeProxy_Setup_v2.0.0
+OutputBaseFilename=TraeProxy_Setup_v2.1.0
 Compression=lzma2/ultra64
 SolidCompression=yes
 

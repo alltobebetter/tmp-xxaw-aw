@@ -9,7 +9,7 @@ import { WindowMinimise, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
 import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, UpdateModelMap, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
 
-const CURRENT_APP_VERSION = '2.0.0'
+const CURRENT_APP_VERSION = '2.1.0'
 
 const isRunning = ref(false)
 const certTrusted = ref(false)
