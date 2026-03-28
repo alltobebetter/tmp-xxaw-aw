@@ -43,6 +43,7 @@ const showToast = (msg: string, type: 'error' | 'success' = 'error') => {
 const showHideModal = ref(false)
 const showClearDataModal = ref(false)
 const showHelpModal = ref(false)
+const showChangelogModal = ref(false)
 const dontShowHideWarning = ref(false)
 
 const hotkeyLabel = computed(() => {
@@ -564,6 +565,10 @@ const handleVerifyToken = async () => {
       <div class="brand">
         <Server :size="16" class="brand-icon"/>
         <span class="brand-title">TraeProxy</span>
+        <a href="javascript:void(0)" class="titlebar-link" @click="showChangelogModal = true" style="--wails-draggable:no-drag;" title="查看更新日志">
+          <Rocket :size="11" />
+          <span>更新日志</span>
+        </a>
       </div>
       <!-- Windows: icon buttons on RIGHT -->
       <div v-if="platform !== 'darwin'" class="system-controls" style="--wails-draggable:no-drag;">
@@ -1083,6 +1088,48 @@ const handleVerifyToken = async () => {
         </div>
       </div>
     </Transition>
+
+    <!-- Changelog Modal -->
+    <Transition name="modal">
+      <div v-if="showChangelogModal" class="modal-overlay" @click.self="showChangelogModal = false">
+        <div class="modal-content card help-modal">
+          <div class="help-modal-header">
+            <Rocket :size="20" style="color: var(--color-primary);" />
+            <h3>版本更新日志 (v{{ CURRENT_APP_VERSION }})</h3>
+            <button class="help-modal-close" @click="showChangelogModal = false">
+              <X :size="16" />
+            </button>
+          </div>
+          <div class="help-modal-body">
+
+            <div class="faq-section">
+              <div class="faq-badge">v2.1.0 现行版本</div>
+              <ul>
+                <li>优化跨平台构建系统，完善 Windows 和 macOS 端版本同步更新机制</li>
+                <li>增加一键本地 Git 提交隔离逻辑，解耦 Website 与底层 Proxy 的推送</li>
+                <li>新增顶部栏更新日志快捷入口，方便随时查阅改动情况与新功能</li>
+              </ul>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge">v2.0.0</div>
+              <ul>
+                <li><b>双平台支持</b>：完美兼容 Windows 和 macOS 平台原生 API。</li>
+                <li><b>Anthropic 支持</b>：全量支持代理并劫持发送给 Claude 系列的请求。</li>
+                <li><b>密钥轮询重构</b>：可配置多 API Key 自动轮换防限速，支持分组导出导入。</li>
+                <li><b>L站/GitHub 登录</b>：鉴权系统接入 LinuxDo、Github，一键领取防刷凭证。</li>
+              </ul>
+            </div>
+
+            <div class="faq-section">
+              <div class="faq-badge">v1.x 早期版本</div>
+              <p>实现了针对 Trae 的本地代理重定向拦截引擎核心，支持动态修改 BaseUrl（包含 OpenAI 等大模型请求的底层劫持） 并以无侵入方式动态注入系统的 Chromium / Node 环境变量。</p>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1123,6 +1170,26 @@ const handleVerifyToken = async () => {
   font-size: 0.85rem;
   color: var(--text-main);
   letter-spacing: -0.2px;
+}
+.titlebar-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+.titlebar-link:hover {
+  background: var(--border-subtle);
+  color: var(--text-main);
+  border-color: var(--text-muted);
 }
 
 .system-controls {
