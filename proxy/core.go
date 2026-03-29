@@ -85,6 +85,26 @@ func (m *ModelMap) InjectableModels() []string {
 	return result
 }
 
+// SystemPrompt manages a thread-safe custom system prompt.
+type SystemPrompt struct {
+	mu      sync.RWMutex
+	enabled bool
+	text    string
+}
+
+func (s *SystemPrompt) Set(enabled bool, text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.enabled = enabled
+	s.text = text
+}
+
+func (s *SystemPrompt) Get() (bool, string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.enabled, s.text
+}
+
 // ---------------------------------------------------------------------------
 // Provider abstraction
 // ---------------------------------------------------------------------------
@@ -119,6 +139,7 @@ type Server struct {
 	generalKeys     KeyPool
 	openaiModels    ModelMap
 	anthropicModels ModelMap
+	systemPrompt    SystemPrompt
 }
 
 func New() *Server {
@@ -138,6 +159,10 @@ func (s *Server) SetKeyPools(openai, anthropic, general []string) {
 func (s *Server) SetModelMaps(openai, anthropic map[string]string) {
 	s.openaiModels.SetMap(openai)
 	s.anthropicModels.SetMap(anthropic)
+}
+
+func (s *Server) UpdateSystemPrompt(enabled bool, text string) {
+	s.systemPrompt.Set(enabled, text)
 }
 
 func (s *Server) emitLog(prefix, msg, msgType string) {
@@ -209,32 +234,87 @@ func (s *Server) handleProviderRequest(prov *providerConfig, req *http.Request, 
 		s.emitLog(prov.name, "已轮询替换密钥: "+maskKey(key), "success")
 	}
 
-	// Model remapping — only parse body for POST-like methods
+	// Body modification — parse body for POST-like methods
 	if req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH" {
 		if req.Body != nil {
 			bodyBytes, err := io.ReadAll(req.Body)
 			if err == nil && len(bodyBytes) > 0 {
 				var bodyParsed map[string]interface{}
 				if json.Unmarshal(bodyBytes, &bodyParsed) == nil {
-					if originalModel, ok := bodyParsed["model"].(string); ok {
+					modified := false
+					originalModel := ""
+
+					// 1. Model remapping
+					if orig, ok := bodyParsed["model"].(string); ok {
+						originalModel = orig
 						if targetModel, mapped := prov.modelMap.Get(originalModel); mapped {
 							bodyParsed["model"] = targetModel
-							newBodyBytes, err := json.Marshal(bodyParsed)
-							if err == nil {
-								req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
-								req.ContentLength = int64(len(newBodyBytes))
-								// Store rewrite info for response handler
-								ctx.UserData = &requestInfo{
-									provider:      prov.modelFmt,
-									originalModel: originalModel,
+							modified = true
+							// Store rewrite info for response handler
+							ctx.UserData = &requestInfo{
+								provider:      prov.modelFmt,
+								originalModel: originalModel,
+							}
+							s.emitLog("Model", "成功重写 "+prov.name+" 模型: "+originalModel+" -> "+targetModel, "success")
+						}
+					}
+
+					// 2. Custom System Prompt Injection
+					spEnabled, spText := s.systemPrompt.Get()
+					if spEnabled && spText != "" {
+						if prov.modelFmt == "openai" {
+							if messagesList, ok := bodyParsed["messages"].([]interface{}); ok {
+								systemFound := false
+								for _, msgIf := range messagesList {
+									if msgMap, ok := msgIf.(map[string]interface{}); ok {
+										if role, ok := msgMap["role"].(string); ok && role == "system" {
+											if content, ok := msgMap["content"].(string); ok {
+												// Trae often passes very large system prompts. We prepend ours.
+												msgMap["content"] = spText + "\n\n" + content
+												systemFound = true
+												break
+											}
+										}
+									}
 								}
-								s.emitLog("Model", "成功重写 "+prov.name+" 模型: "+originalModel+" -> "+targetModel, "success")
-								return
+								if systemFound {
+									modified = true
+									s.emitLog("Prompt", "已注入自定义系统提示词 (追加到现有系统消息)", "success")
+								} else {
+									// Prepend a new system message
+									newSysMsg := map[string]interface{}{"role": "system", "content": spText}
+									bodyParsed["messages"] = append([]interface{}{newSysMsg}, messagesList...)
+									modified = true
+									s.emitLog("Prompt", "已注入自定义系统提示词 (前置插入新系统消息)", "success")
+								}
+							}
+						} else if prov.modelFmt == "anthropic" {
+							if origSys, ok := bodyParsed["system"].(string); ok {
+								bodyParsed["system"] = spText + "\n\n" + origSys
+								modified = true
+								s.emitLog("Prompt", "已注入自定义系统提示词 (追加到现有系统属性)", "success")
+							} else {
+								bodyParsed["system"] = spText
+								modified = true
+								s.emitLog("Prompt", "已注入自定义系统提示词 (新建系统属性)", "success")
 							}
 						}
 					}
+
+					if modified {
+						newBodyBytes, err := json.Marshal(bodyParsed)
+						if err == nil {
+							req.Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
+							req.ContentLength = int64(len(newBodyBytes))
+							// Store provider info explicitly if not already stored
+							if ctx.UserData == nil {
+								ctx.UserData = &requestInfo{provider: prov.modelFmt, originalModel: originalModel}
+							}
+							return
+						}
+					}
 				}
-				// No rewrite happened — restore body
+				// No modification happened or error — restore body
 				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			}
 		}

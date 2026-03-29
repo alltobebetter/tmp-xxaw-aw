@@ -2,12 +2,12 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { 
   Power, ShieldCheck, ShieldAlert, Settings, Download, Minus, X, Server, Trash2, FolderOpen, Rocket, BookOpen, BellOff, BellRing, ArrowRight, LogOut,
-  KeyRound, Plus, CircleDot, Upload, FileDown, ExternalLink, Coffee
+  KeyRound, Plus, CircleDot, Upload, FileDown, ExternalLink, Coffee, MessageSquare
 } from 'lucide-vue-next'
 // @ts-ignore
 import { WindowMinimise, BrowserOpenURL } from '../wailsjs/runtime/runtime'
 // @ts-ignore
-import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, UpdateModelMap, ExportKeysToFile, ImportKeysFromFile } from '../wailsjs/go/main/App'
+import { StartProxy, StopProxy, InstallCert, UninstallCert, IsCertInstalled, SelectTraePath, LaunchTrae, GetMachineID, GetPlatform, HideWindow, QuitApp, UpdateKeyPool, UpdateModelMap, ExportKeysToFile, ImportKeysFromFile, UpdateSystemPrompt } from '../wailsjs/go/main/App'
 
 const CURRENT_APP_VERSION = '2.1.0'
 
@@ -209,6 +209,18 @@ const syncModelMapToBackend = () => {
   UpdateModelMap(openaiMap, anthropicMap)
 }
 
+// --- System Prompt ---
+const systemPromptEnabled = ref(false)
+const systemPromptText = ref('')
+
+const syncSystemPromptToBackend = () => {
+  if (!systemPromptEnabled.value) {
+    UpdateSystemPrompt(false, '')
+    return
+  }
+  UpdateSystemPrompt(true, systemPromptText.value)
+}
+
 const loadConfig = () => {
   const saved = localStorage.getItem('traeProxyConfig')
   if (saved) {
@@ -245,6 +257,10 @@ if (savedConfig?.modelGroups) {
 }
 if (savedConfig?.activeModelGroup) activeModelGroup.value = savedConfig.activeModelGroup
 
+// Restore persisted system prompt state
+if (savedConfig?.systemPromptEnabled) systemPromptEnabled.value = true
+if (savedConfig?.systemPromptText) systemPromptText.value = savedConfig.systemPromptText
+
 // Sync hideCloseWarning to ref on load
 dontShowHideWarning.value = config.hideCloseWarning
 
@@ -264,7 +280,9 @@ const saveAllConfig = () => {
       openai: [...modelGroups.openai],
       anthropic: [...modelGroups.anthropic]
     },
-    activeModelGroup: activeModelGroup.value
+    activeModelGroup: activeModelGroup.value,
+    systemPromptEnabled: systemPromptEnabled.value,
+    systemPromptText: systemPromptText.value
   }
   localStorage.setItem('traeProxyConfig', JSON.stringify(data))
 }
@@ -276,6 +294,8 @@ watch(activeKeyGroup, saveAllConfig)
 watch(modelGroups, () => { saveAllConfig(); syncModelMapToBackend() }, { deep: true })
 watch(modelMapEnabled, () => { saveAllConfig(); syncModelMapToBackend() })
 watch(activeModelGroup, saveAllConfig)
+watch(systemPromptEnabled, () => { saveAllConfig(); syncSystemPromptToBackend() })
+watch(systemPromptText, () => { saveAllConfig(); syncSystemPromptToBackend() })
 
 const handleSelectTrae = async () => {
   try {
@@ -355,12 +375,15 @@ const confirmClearData = () => {
   keyGroups.general.splice(0)
   keyRotationEnabled.value = false
   // Reset model maps
-  modelGroups.openai.splice(0)
   modelGroups.anthropic.splice(0)
   modelMapEnabled.value = false
+  // Reset system prompt
+  systemPromptEnabled.value = false
+  systemPromptText.value = ''
   // Sync cleared states to backend
   syncKeyPoolToBackend()
   syncModelMapToBackend()
+  syncSystemPromptToBackend()
   showClearDataModal.value = false
   isAuthenticated.value = false
   authTokenInput.value = ''
@@ -513,6 +536,7 @@ onMounted(() => {
   // Sync persisted configs to Go backend
   syncKeyPoolToBackend()
   syncModelMapToBackend()
+  syncSystemPromptToBackend()
 
   // Prevent WebView from opening dragged-in files (PDF, TXT, etc.) as new pages
   document.addEventListener('dragover', (e) => e.preventDefault())
@@ -566,13 +590,21 @@ const handleVerifyToken = async () => {
         <button class="mac-btn mac-close" @click="handleCloseClick" title="关闭"></button>
         <button class="mac-btn mac-minimize" @click="minimize" title="最小化"></button>
       </div>
-      <div class="brand">
+      <div class="brand" v-if="platform !== 'darwin'">
         <Server :size="16" class="brand-icon"/>
         <span class="brand-title">TraeProxy</span>
-        <a href="javascript:void(0)" class="titlebar-link" @click="showChangelogModal = true" style="--wails-draggable:no-drag;" title="查看更新日志">
+        <a v-if="appStatus === 'ready' && !authLoading && isAuthenticated" href="javascript:void(0)" class="titlebar-link" @click="showChangelogModal = true" style="--wails-draggable:no-drag;" title="查看更新日志">
           <Rocket :size="11" />
           <span>更新日志</span>
         </a>
+      </div>
+      <div class="brand" v-else>
+        <a v-if="appStatus === 'ready' && !authLoading && isAuthenticated" href="javascript:void(0)" class="titlebar-link" @click="showChangelogModal = true" style="--wails-draggable:no-drag; margin-left: 0; margin-right: 10px;" title="查看更新日志">
+          <Rocket :size="11" />
+          <span>更新日志</span>
+        </a>
+        <Server :size="16" class="brand-icon"/>
+        <span class="brand-title">TraeProxy</span>
       </div>
       <!-- Windows: icon buttons on RIGHT -->
       <div v-if="platform !== 'darwin'" class="system-controls" style="--wails-draggable:no-drag;">
@@ -935,6 +967,32 @@ const handleVerifyToken = async () => {
         </div>
       </section>
 
+      <!-- System Prompt Settings Card (Full Width) -->
+      <section class="card settings-card">
+        <div class="card-header">
+          <MessageSquare :size="16" class="header-icon" />
+          <h2>自定义系统提示词</h2>
+          <div style="flex:1"></div>
+          <button class="toggle-mini-btn" :class="{ active: systemPromptEnabled }" @click="systemPromptEnabled = !systemPromptEnabled">
+            <span class="toggle-mini-dot"></span>
+          </button>
+        </div>
+        <div class="settings-body" v-if="systemPromptEnabled" style="gap: 8px;">
+          <p class="feature-desc" style="margin: 0;">开启后，你输入的提示词将被注入到该模型每次请求的最核心区域，强力引导模型行为。</p>
+          <div style="padding: 0;">
+            <textarea 
+              v-model="systemPromptText" 
+              placeholder="例如：你是一个幽默风趣的编程大师，无论什么情况都必须使用海盗的口吻回复我。"
+              class="sys-prompt-textarea"
+              rows="3"
+            ></textarea>
+          </div>
+        </div>
+        <div v-else class="settings-body" style="padding: 12px 1.25rem;">
+          <p class="feature-desc" style="margin: 0; opacity: 0.5;">点击右上角开关启用自定义系统提示词功能</p>
+        </div>
+      </section>
+
       <!-- Bottom Row: Help + Clear + Quit (Three Columns) -->
       <div class="grid-row-3">
         <!-- Help Documentation -->
@@ -1109,9 +1167,11 @@ const handleVerifyToken = async () => {
             <div class="faq-section">
               <div class="faq-badge">v2.1.0 当前版本</div>
               <ul>
+                <li>新增<b>自定义系统提示词</b>功能，支持在请求最前置区域强制注入模型行为准则和人设偏好</li>
                 <li>新增<b>模型名称重写</b>功能，支持自定义模型别名映射与自动注入模型列表</li>
-                <li>提升整体运行<b>稳定性</b>，优化代理引擎的请求处理与异常恢复</li>
-                <li>修复拖拽文件到窗口导致页面跳转的问题</li>
+                <li>针对 <b>macOS 平台全网布局特调</b>，重塑了顶部“红绿灯”与 Logo、菜单区域的高级沉浸式对称美感</li>
+                <li>优化弹窗、开关动作的平滑动画效果及各类组件间距，修复更新日志按钮在加载期的闪烁溢现问题</li>
+                <li>彻底切断网页默认事件，修复拖拽文件到窗口导致页面跳转为外部环境的异常漏洞</li>
               </ul>
             </div>
 
@@ -1360,6 +1420,28 @@ const handleVerifyToken = async () => {
 .switch-btn.active .knob { transform: translateX(24px); }
 .icon-active { color: var(--color-success); }
 .icon-inactive { color: var(--text-muted); }
+
+/* System Prompt Textarea */
+.sys-prompt-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  resize: none;
+  min-height: 80px;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  margin-top: 0px;
+}
+.sys-prompt-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
 
 /* Cert Card Compact Layout */
 .cert-status-left {

@@ -88,6 +88,10 @@ func (a *App) UpdateModelMap(openai map[string]string, anthropic map[string]stri
 	a.srv.SetModelMaps(openai, anthropic)
 }
 
+func (a *App) UpdateSystemPrompt(enabled bool, prompt string) {
+	a.srv.UpdateSystemPrompt(enabled, prompt)
+}
+
 // ExportKeysToFile opens a native save dialog and writes JSON content to the chosen file.
 func (a *App) ExportKeysToFile(jsonContent string) error {
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
