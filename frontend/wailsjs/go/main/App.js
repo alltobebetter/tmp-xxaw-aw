@@ -61,3 +61,7 @@ export function UpdateKeyPool(arg1, arg2, arg3) {
 export function UpdateModelMap(arg1, arg2) {
   return window['go']['main']['App']['UpdateModelMap'](arg1, arg2);
 }
+
+export function UpdateSystemPrompt(arg1, arg2) {
+  return window['go']['main']['App']['UpdateSystemPrompt'](arg1, arg2);
+}

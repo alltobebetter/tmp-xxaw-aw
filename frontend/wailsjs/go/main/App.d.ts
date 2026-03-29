@@ -30,3 +30,5 @@ export function UninstallCert():Promise<void>;
 export function UpdateKeyPool(arg1:Array<string>,arg2:Array<string>,arg3:Array<string>):Promise<void>;
 
 export function UpdateModelMap(arg1:Record<string, string>,arg2:Record<string, string>):Promise<void>;
+
+export function UpdateSystemPrompt(arg1:boolean,arg2:string):Promise<void>;
